@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "gh-pages -d dist",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "homepage": "https://aboshi1539.github.io/Personal_production_2"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
