@@ -211,6 +211,143 @@ export default function Draw3D() {
     setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
   };
 
+  const handleScale = (factor) => {
+    if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
+    
+    let count = 0;
+    const center = new THREE.Vector3();
+    selection.strokeIndices.forEach(idx => {
+      strokesRef.current[idx].points.forEach(p => { center.add(new THREE.Vector3(...p)); count++; });
+    });
+    selection.boxIndices.forEach(idx => {
+      center.add(new THREE.Vector3(...boxesRef.current[idx].position)); count++;
+    });
+    selection.textIndices.forEach(idx => {
+      center.add(new THREE.Vector3(...textsRef.current[idx].position)); count++;
+    });
+    if (count > 0) center.divideScalar(count);
+
+    const nextStrokes = [...strokesRef.current];
+    selection.strokeIndices.forEach(idx => {
+      nextStrokes[idx] = {
+        ...nextStrokes[idx],
+        points: nextStrokes[idx].points.map(p => [
+          center.x + (p[0] - center.x) * factor,
+          center.y + (p[1] - center.y) * factor,
+          center.z + (p[2] - center.z) * factor
+        ])
+      };
+    });
+
+    const nextBoxes = [...boxesRef.current];
+    selection.boxIndices.forEach(idx => {
+      const b = nextBoxes[idx];
+      nextBoxes[idx] = { 
+        ...b, 
+        position: [
+          center.x + (b.position[0] - center.x) * factor,
+          center.y + (b.position[1] - center.y) * factor,
+          center.z + (b.position[2] - center.z) * factor
+        ],
+        size: b.size.map(s => s * factor)
+      };
+    });
+
+    const nextTexts = [...textsRef.current];
+    selection.textIndices.forEach(idx => {
+      const t = nextTexts[idx];
+      nextTexts[idx] = { 
+        ...t, 
+        position: [
+          center.x + (t.position[0] - center.x) * factor,
+          center.y + (t.position[1] - center.y) * factor,
+          center.z + (t.position[2] - center.z) * factor
+        ],
+        size: t.size * factor
+      };
+    });
+
+    setStrokes(nextStrokes);
+    setBoxes(nextBoxes);
+    setTexts(nextTexts);
+    setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
+  };
+
+  const handleRotate = (axis, angleDeg) => {
+    if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
+    
+    let count = 0;
+    const center = new THREE.Vector3();
+    selection.strokeIndices.forEach(idx => {
+      strokesRef.current[idx].points.forEach(p => { center.add(new THREE.Vector3(...p)); count++; });
+    });
+    selection.boxIndices.forEach(idx => {
+      center.add(new THREE.Vector3(...boxesRef.current[idx].position)); count++;
+    });
+    selection.textIndices.forEach(idx => {
+      center.add(new THREE.Vector3(...textsRef.current[idx].position)); count++;
+    });
+    if (count > 0) center.divideScalar(count);
+
+    const angle = angleDeg * Math.PI / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    const rotatePoint = (p) => {
+      let dx = p[0] - center.x;
+      let dy = p[1] - center.y;
+      let dz = p[2] - center.z;
+      let nx = dx, ny = dy, nz = dz;
+      
+      if (axis === 'x') {
+        ny = dy * cos - dz * sin;
+        nz = dy * sin + dz * cos;
+      } else if (axis === 'y') {
+        nx = dx * cos + dz * sin;
+        nz = -dx * sin + dz * cos;
+      } else if (axis === 'z') {
+        nx = dx * cos - dy * sin;
+        ny = dx * sin + dy * cos;
+      }
+      return [center.x + nx, center.y + ny, center.z + nz];
+    };
+
+    const nextStrokes = [...strokesRef.current];
+    selection.strokeIndices.forEach(idx => {
+      nextStrokes[idx] = {
+        ...nextStrokes[idx],
+        points: nextStrokes[idx].points.map(rotatePoint)
+      };
+    });
+
+    const nextBoxes = [...boxesRef.current];
+    selection.boxIndices.forEach(idx => {
+      const b = nextBoxes[idx];
+      const np = rotatePoint(b.position);
+      const rot = b.rotation ? [...b.rotation] : [0,0,0];
+      if (axis === 'x') rot[0] += angle;
+      if (axis === 'y') rot[1] += angle;
+      if (axis === 'z') rot[2] += angle;
+      nextBoxes[idx] = { ...b, position: np, rotation: rot };
+    });
+
+    const nextTexts = [...textsRef.current];
+    selection.textIndices.forEach(idx => {
+      const t = nextTexts[idx];
+      const np = rotatePoint(t.position);
+      const rot = t.rotation ? [...t.rotation] : [0,0,0];
+      if (axis === 'x') rot[0] += angle;
+      if (axis === 'y') rot[1] += angle;
+      if (axis === 'z') rot[2] += angle;
+      nextTexts[idx] = { ...t, position: np, rotation: rot };
+    });
+
+    setStrokes(nextStrokes);
+    setBoxes(nextBoxes);
+    setTexts(nextTexts);
+    setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
+  };
+
   const handleFlip = (axis) => {
     if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
     
