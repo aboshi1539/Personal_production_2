@@ -21,6 +21,8 @@ export default function Draw2D() {
   
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [lastSavedIndex, setLastSavedIndex] = useState(0);
+  const [showConfirmHome, setShowConfirmHome] = useState(false);
 
   const [shapeType, setShapeType] = useState('circle');
   const [shapeStart, setShapeStart] = useState(null);
@@ -283,10 +285,10 @@ export default function Draw2D() {
       if (p.y > maxY) maxY = p.y;
     });
     
-    minX = Math.max(0, minX - 2);
-    minY = Math.max(0, minY - 2);
-    maxX = Math.min(window.innerWidth, maxX + 2);
-    maxY = Math.min(window.innerHeight, maxY + 2);
+    minX = Math.floor(Math.max(0, minX - 2));
+    minY = Math.floor(Math.max(0, minY - 2));
+    maxX = Math.ceil(Math.min(canvasRef.current.width / 2, maxX + 2));
+    maxY = Math.ceil(Math.min(canvasRef.current.height / 2, maxY + 2));
     
     const width = maxX - minX;
     const height = maxY - minY;
@@ -316,12 +318,14 @@ export default function Draw2D() {
 
     const imageData = tempCtx.getImageData(0, 0, width * 2, height * 2);
     const data = imageData.data;
-    let tightMinX = width * 2, tightMinY = height * 2, tightMaxX = 0, tightMaxY = 0;
+    const imgWidth = imageData.width;
+    const imgHeight = imageData.height;
+    let tightMinX = imgWidth, tightMinY = imgHeight, tightMaxX = 0, tightMaxY = 0;
     let hasPixels = false;
 
-    for (let y = 0; y < height * 2; y++) {
-      for (let x = 0; x < width * 2; x++) {
-        const alpha = data[(y * width * 2 + x) * 4 + 3];
+    for (let y = 0; y < imgHeight; y++) {
+      for (let x = 0; x < imgWidth; x++) {
+        const alpha = data[(y * imgWidth + x) * 4 + 3];
         if (alpha > 0) {
           hasPixels = true;
           if (x < tightMinX) tightMinX = x;
@@ -389,6 +393,9 @@ export default function Draw2D() {
   };
 
   const startDrawing = (e) => {
+    if (e.target.setPointerCapture) {
+      e.target.setPointerCapture(e.pointerId);
+    }
     const { x, y } = getCoordinates(e);
 
     if (replaceModeColor && tool !== 'eyedropper') {
@@ -516,7 +523,10 @@ export default function Draw2D() {
     contextRef.current.stroke();
   };
 
-  const finishDrawing = () => {
+  const finishDrawing = (e) => {
+    if (e && e.target && e.target.releasePointerCapture && e.target.hasPointerCapture && e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
     if (tool === 'lasso' && isDraggingSelection) {
       setIsDraggingSelection(false);
       return;
@@ -634,6 +644,8 @@ export default function Draw2D() {
     link.download = filename.endsWith('.png') || filename.endsWith('.jpeg') || filename.endsWith('.jpg') ? filename : `${filename}.png`;
     link.href = dataUrl;
     link.click();
+    
+    setLastSavedIndex(selection ? historyIndex + 1 : historyIndex);
   };
 
   const handleUpload = (e) => {
@@ -736,6 +748,19 @@ export default function Draw2D() {
     e.target.value = '';
   };
 
+  const isCanvasEmpty = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return true;
+    const ctx = contextRef.current;
+    if (!ctx) return true;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = new Uint32Array(imageData.data.buffer);
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
+  };
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
@@ -750,7 +775,13 @@ export default function Draw2D() {
         
         {showUI && (
           <>
-            <button className="start-button" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
+            <button className="start-button" onClick={() => {
+              if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
+                setShowConfirmHome(true);
+              } else {
+                navigate('/');
+              }
+            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
               <HomeIcon size={20} /> 
             </button>
             <button 
@@ -1028,6 +1059,17 @@ export default function Draw2D() {
               stroke="#3b82f6" 
               strokeWidth="3" 
             />
+            {lassoPoints.length > 1 && (
+              <line 
+                x1={lassoPoints[0].x} 
+                y1={lassoPoints[0].y} 
+                x2={lassoPoints[lassoPoints.length - 1].x} 
+                y2={lassoPoints[lassoPoints.length - 1].y} 
+                stroke="#3b82f6" 
+                strokeWidth="2" 
+                strokeDasharray="5,5" 
+              />
+            )}
           </svg>
         )}
 
@@ -1108,10 +1150,35 @@ export default function Draw2D() {
           onPointerDown={startDrawing}
           onPointerMove={draw}
           onPointerUp={finishDrawing}
-          onPointerOut={finishDrawing}
+          onPointerCancel={finishDrawing}
           style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
         />
       </div>
+
+      {showConfirmHome && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => navigate('/')}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowConfirmHome(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
