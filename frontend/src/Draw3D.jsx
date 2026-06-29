@@ -1,10 +1,28 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
 import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera } from 'lucide-react';
 import './index.css';
+import Draw2D from './Draw2D';
+
+function VirtualCanvasMesh({ data, isSelected }) {
+  const texture = useMemo(() => {
+    const img = new Image();
+    img.src = data.textureUrl;
+    const tex = new THREE.Texture(img);
+    img.onload = () => tex.needsUpdate = true;
+    return tex;
+  }, [data.textureUrl]);
+
+  return (
+    <mesh position={data.position} rotation={data.rotation || [0,0,0]}>
+      <planeGeometry args={[data.size[0], data.size[1]]} />
+      <meshStandardMaterial map={texture} transparent side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
+    </mesh>
+  );
+}
 
 function pointInPolygon(point, vs) {
   let x = point[0], y = point[1];
@@ -95,6 +113,26 @@ export default function Draw3D() {
 
   const [history, setHistory] = useState([{ strokes: [], boxes: [], texts: [] }]);
   const [historyIndex, setHistoryIndex] = useState(0);
+
+  const [showVirtualCanvas, setShowVirtualCanvas] = useState(false);
+  const handleVirtualCanvasComplete = (dataUrl, aspect) => {
+    setShowVirtualCanvas(false);
+    const sizeY = 20;
+    const sizeX = 20 * aspect;
+    const newBoard = {
+      shapeType: 'virtualCanvas',
+      textureUrl: dataUrl,
+      position: [cameraRef.current ? cameraRef.current.position.x : 0, 5, 0],
+      rotation: [0, 0, 0],
+      size: [sizeX, sizeY, 0],
+      color: '#ffffff'
+    };
+    setBoxes(prev => {
+      const next = [...prev, newBoard];
+      setTimeout(() => saveHistory(strokes, next, texts), 0);
+      return next;
+    });
+  };
 
   const saveHistory = useCallback((newStrokes, newBoxes, newTexts) => {
     setHistory(prev => {
@@ -824,6 +862,9 @@ export default function Draw3D() {
 
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
+          <button onClick={() => setShowVirtualCanvas(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#fdf4ff', color: '#86198f', border: '1px solid #fbcfe8', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Square size={18} /> 仮想キャンバス
+          </button>
           <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <Upload size={18} /> 読み込み
             <input type="file" accept=".json" onChange={handleLoadData} style={{ display: 'none' }} />
@@ -1121,6 +1162,9 @@ export default function Draw3D() {
           {boxes.map((b, index) => {
             const isSelected = selection?.boxIndices.includes(index);
             const type = b.shapeType || 'box';
+            if (type === 'virtualCanvas') {
+              return <VirtualCanvasMesh key={`b-${index}`} data={b} isSelected={isSelected} />;
+            }
             return (
               <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0,0,0]}>
                 {type === 'box' && <boxGeometry args={b.size} />}
@@ -1236,6 +1280,11 @@ export default function Draw3D() {
           dampingFactor={0.05}
         />
       </Canvas>
+      {showVirtualCanvas && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, background: '#fafafa' }}>
+          <Draw2D isVirtualCanvas={true} onVirtualCanvasComplete={handleVirtualCanvasComplete} onVirtualCanvasCancel={() => setShowVirtualCanvas(false)} />
+        </div>
+      )}
     </div>
   );
 }

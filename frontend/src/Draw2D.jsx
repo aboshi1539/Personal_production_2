@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload } from 'lucide-react';
 import './index.css';
 
-export default function Draw2D() {
+export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplete, onVirtualCanvasCancel }) {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -775,15 +775,40 @@ export default function Draw2D() {
         
         {showUI && (
           <>
-            <button className="start-button" onClick={() => {
-              if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
-                setShowConfirmHome(true);
-              } else {
-                navigate('/');
-              }
-            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-              <HomeIcon size={20} /> 
-            </button>
+            {!isVirtualCanvas && (
+              <button className="start-button" onClick={() => {
+                if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
+                  setShowConfirmHome(true);
+                } else {
+                  navigate('/');
+                }
+              }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
+                <HomeIcon size={20} /> 
+              </button>
+            )}
+            {isVirtualCanvas && (
+              <>
+                <button 
+                  className="start-button" 
+                  onClick={() => {
+                    if (onVirtualCanvasComplete) {
+                      const canvas = canvasRef.current;
+                      onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height);
+                    }
+                  }} 
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', background: '#ecfdf5', borderColor: '#10b981', color: '#047857' }}
+                >
+                  <Square size={20} /> 配置
+                </button>
+                <button 
+                  className="start-button" 
+                  onClick={onVirtualCanvasCancel} 
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', background: '#fef2f2', borderColor: '#ef4444', color: '#b91c1c' }}
+                >
+                  キャンセル
+                </button>
+              </>
+            )}
             <button 
               className="start-button" 
               onClick={undo} 
