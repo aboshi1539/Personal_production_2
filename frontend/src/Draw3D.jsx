@@ -3,7 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera } from 'lucide-react';
 import './index.css';
 
 function pointInPolygon(point, vs) {
@@ -82,6 +82,13 @@ export default function Draw3D() {
   const strokesRef = useRef([]);
   const boxesRef = useRef([]);
   const textsRef = useRef([]);
+  const controlsRef = useRef(null);
+
+  const handleResetCamera = () => {
+    if (controlsRef.current) {
+      controlsRef.current.reset();
+    }
+  };
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { boxesRef.current = boxes; }, [boxes]);
   useEffect(() => { textsRef.current = texts; }, [texts]);
@@ -731,46 +738,108 @@ export default function Draw3D() {
     setTimeout(() => saveHistory([], [], []), 0);
   };
 
+  const handleSaveData = () => {
+    const data = {
+      strokes: strokesRef.current,
+      boxes: boxesRef.current,
+      texts: textsRef.current
+    };
+    const json = JSON.stringify(data);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    link.download = `3d-drawing-${timestamp}.json`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleLoadData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (data.strokes) setStrokes(data.strokes);
+        if (data.boxes) setBoxes(data.boxes);
+        if (data.texts) setTexts(data.texts);
+        setTimeout(() => saveHistory(data.strokes || [], data.boxes || [], data.texts || []), 0);
+      } catch (err) {
+        alert("データの読み込みに失敗しました");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   return (
-    <div className="app-container" style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-        <button 
-          className="start-button" 
-          onClick={() => setShowUI(!showUI)} 
-          title={showUI ? "メニューを非表示" : "メニューを表示"}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
-        >
-          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
-        
+    <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button 
+            className="start-button" 
+            onClick={() => setShowUI(!showUI)} 
+            title={showUI ? "メニューを非表示" : "メニューを表示"}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
+          >
+            {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+          
+          {showUI && (
+            <>
+              <button className="start-button" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
+                <HomeIcon size={20} /> 
+              </button>
+              <button 
+                className="start-button" 
+                onClick={undo} 
+                disabled={historyIndex === 0}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <Undo2 size={20} /> 
+              </button>
+              <button 
+                className="start-button" 
+                onClick={redo} 
+                disabled={historyIndex >= history.length - 1}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+              >
+                <Redo2 size={20} /> 
+              </button>
+            </>
+          )}
+        </div>
         {showUI && (
-          <>
-            <button className="start-button" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-              <HomeIcon size={20} /> 
-            </button>
-            <button 
-              className="start-button" 
-              onClick={undo} 
-              disabled={historyIndex === 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
-            >
-              <Undo2 size={20} /> 
-            </button>
-            <button 
-              className="start-button" 
-              onClick={redo} 
-              disabled={historyIndex >= history.length - 1}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-            >
-              <Redo2 size={20} /> 
-            </button>
-          </>
+          <button 
+            className="start-button"
+            onClick={handleResetCamera} 
+            style={{ alignSelf: 'flex-start', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1rem' }}
+          >
+            正面に戻る
+          </button>
         )}
       </div>
 
+      {showUI && (
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Upload size={18} /> 読み込み
+            <input type="file" accept=".json" onChange={handleLoadData} style={{ display: 'none' }} />
+          </label>
+          <button onClick={handleSaveData} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Download size={18} /> 保存
+          </button>
+          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Trash2 size={18} /> 
+          </button>
+        </div>
+      )}
+
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', left: 'calc(50% + 120px)', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: 'max-content', maxWidth: 'calc(100vw - 650px)' }}>
           
           {/* モード切替とツール */}
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -963,15 +1032,6 @@ export default function Draw3D() {
              onChange={(e) => setDistance(parseFloat(e.target.value))}
              style={{ width: '100%' }}
            />
-        </div>
-      )}
-
-      {/* 5. クリアボタン (右上) */}
-      {showUI && (
-        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <button onClick={handleClear} style={{ padding: '0.5rem 1rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
-            <Trash2 size={18} /> 
-          </button>
         </div>
       )}
 
@@ -1170,6 +1230,7 @@ export default function Draw3D() {
         
         <Environment preset="city" />
         <OrbitControls 
+          ref={controlsRef}
           enabled={!isDrawingMode} 
           enableDamping 
           dampingFactor={0.05}
