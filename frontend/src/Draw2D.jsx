@@ -23,6 +23,8 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [lastSavedIndex, setLastSavedIndex] = useState(0);
   const [showConfirmHome, setShowConfirmHome] = useState(false);
+  const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
+  const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
 
   const [shapeType, setShapeType] = useState('circle');
   const [shapeStart, setShapeStart] = useState(null);
@@ -786,29 +788,6 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
                 <HomeIcon size={20} /> 
               </button>
             )}
-            {isVirtualCanvas && (
-              <>
-                <button 
-                  className="start-button" 
-                  onClick={() => {
-                    if (onVirtualCanvasComplete) {
-                      const canvas = canvasRef.current;
-                      onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height);
-                    }
-                  }} 
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', background: '#ecfdf5', borderColor: '#10b981', color: '#047857' }}
-                >
-                  <Square size={20} /> 配置
-                </button>
-                <button 
-                  className="start-button" 
-                  onClick={onVirtualCanvasCancel} 
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', background: '#fef2f2', borderColor: '#ef4444', color: '#b91c1c' }}
-                >
-                  キャンセル
-                </button>
-              </>
-            )}
             <button 
               className="start-button" 
               onClick={undo} 
@@ -825,13 +804,29 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
             >
               <Redo2 size={20} /> 
             </button>
+            {isVirtualCanvas && (
+              <>
+                <button 
+                  onClick={() => setShowVirtualCompleteConfirm(true)} 
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                >
+                  <Square size={18} /> 完了
+                </button>
+                <button 
+                  onClick={() => setShowVirtualCancelConfirm(true)} 
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#fef2f2', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                >
+                  キャンセル
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
 
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ position: 'absolute', top: '20px', left: isVirtualCanvas ? 'calc(50% + 100px)' : '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <PenTool size={18} /> 
@@ -1049,14 +1044,14 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
       {/* 4. 保存＆全て消去ボタン (右上) */}
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Upload size={18} /> 読み込み
             <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
           </label>
-          <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Download size={18} /> 保存
           </button>
-          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Trash2 size={18} /> 
           </button>
         </div>
@@ -1196,6 +1191,67 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
               </button>
               <button 
                 onClick={() => setShowConfirmHome(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVirtualCompleteConfirm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#047857', fontSize: '1.2rem' }}>確認</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              完了してもよろしいでしょうか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => {
+                  setShowVirtualCompleteConfirm(false);
+                  if (onVirtualCanvasComplete) {
+                    const canvas = canvasRef.current;
+                    onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height);
+                  }
+                }}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowVirtualCompleteConfirm(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVirtualCancelConfirm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>確認</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              キャンセルしてもよろしいでしょうか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => {
+                  setShowVirtualCancelConfirm(false);
+                  if (onVirtualCanvasCancel) {
+                    onVirtualCanvasCancel();
+                  }
+                }}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowVirtualCancelConfirm(false)}
                 style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
               >
                 いいえ

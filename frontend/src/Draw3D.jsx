@@ -3,7 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
@@ -57,7 +57,7 @@ function DrawingController({ isActive, distance, onPointerDown3D, onPointerMove3
 
     const handlePointerDown = (e) => {
       if (!isActive) return;
-      if (e.button !== 0) return; // Only left click
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // Only left click for mouse
       isDragging.current = true;
       const { pos3D, posNDC } = getPosition(e);
       onPointerDown3D([pos3D.x, pos3D.y, pos3D.z], posNDC);
@@ -117,6 +117,8 @@ export default function Draw3D() {
   const [showVirtualCanvas, setShowVirtualCanvas] = useState(false);
   const handleVirtualCanvasComplete = (dataUrl, aspect) => {
     setShowVirtualCanvas(false);
+    setIsDrawingMode(true);
+    setTool('lasso');
     const sizeY = 20;
     const sizeX = 20 * aspect;
     const newBoard = {
@@ -186,7 +188,7 @@ export default function Draw3D() {
   
   const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
   
-  const [isDrawingMode, setIsDrawingMode] = useState(true);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [tool, setTool] = useState('pen'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
   
   const [brushColor, setBrushColor] = useState('#ef4444');
@@ -196,6 +198,13 @@ export default function Draw3D() {
   const [textInput, setTextInput] = useState('');
   const [textSize, setTextSize] = useState(1);
   const [showUI, setShowUI] = useState(true);
+
+  const handleToolChange = (newTool) => {
+    setTool(newTool);
+    if (newTool !== 'move' && newTool !== 'lasso') {
+      setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+    }
+  };
   const [shapeType, setShapeType] = useState('box');
   const [showSubMenu, setShowSubMenu] = useState(true);
   
@@ -862,17 +871,14 @@ export default function Draw3D() {
 
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => setShowVirtualCanvas(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#fdf4ff', color: '#86198f', border: '1px solid #fbcfe8', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <Square size={18} /> 仮想キャンバス
-          </button>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Upload size={18} /> 読み込み
             <input type="file" accept=".json" onChange={handleLoadData} style={{ display: 'none' }} />
           </label>
-          <button onClick={handleSaveData} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleSaveData} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Download size={18} /> 保存
           </button>
-          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Trash2 size={18} /> 
           </button>
         </div>
@@ -902,14 +908,26 @@ export default function Draw3D() {
             {isDrawingMode && (
               <>
                 <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
-                <button onClick={() => setTool('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
-                <button onClick={() => setTool('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
-                <button onClick={() => setTool('lasso')} style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
-                <button onClick={() => setTool('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
-                <button onClick={() => { setTool('text'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
-                <button onClick={() => setTool('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
-                <button onClick={() => { setTool('shape'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
-                <button onClick={() => setTool('paint')} style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
+                <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
+                <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
+                <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
+                <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
+                <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
+                <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
+                <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
+                <button onClick={() => handleToolChange('paint')} style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
+              </>
+            )}
+            {!isDrawingMode && (
+              <>
+                <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
+                <button 
+                  onClick={() => setShowVirtualCanvas(true)} 
+                  style={{ padding: '0.5rem 1rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="仮想キャンバスを開く"
+                >
+                  <Square size={18} />
+                </button>
               </>
             )}
           </div>
@@ -981,6 +999,7 @@ export default function Draw3D() {
                 <button onClick={() => handleFlip('x')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={14} /> 左右反転</button>
                 <button onClick={() => handleFlip('y')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipVertical size={14} /> 上下反転</button>
                 <button onClick={() => handleFlip('z')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={14} style={{ transform: 'rotate(-45deg)' }} /> 前後反転</button>
+                <button onClick={() => { setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] }); setTool('lasso'); }} style={{ padding: '0.3rem 0.5rem', background: '#fef2f2', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}><X size={14} /> 選択解除</button>
               </div>
             </div>
           )}
