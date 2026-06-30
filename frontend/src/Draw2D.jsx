@@ -1213,7 +1213,42 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
                   setShowVirtualCompleteConfirm(false);
                   if (onVirtualCanvasComplete) {
                     const canvas = canvasRef.current;
-                    onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height);
+                    const ctx = canvas.getContext('2d');
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imgData.data;
+                    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+                    let hasPixels = false;
+                    for (let y = 0; y < canvas.height; y++) {
+                      for (let x = 0; x < canvas.width; x++) {
+                        const alpha = data[(y * canvas.width + x) * 4 + 3];
+                        if (alpha > 0) {
+                          if (x < minX) minX = x;
+                          if (x > maxX) maxX = x;
+                          if (y < minY) minY = y;
+                          if (y > maxY) maxY = y;
+                          hasPixels = true;
+                        }
+                      }
+                    }
+                    if (!hasPixels) {
+                      onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height, 1);
+                    } else {
+                      const padding = 2; // small padding to prevent edge clipping
+                      minX = Math.max(0, minX - padding);
+                      minY = Math.max(0, minY - padding);
+                      maxX = Math.min(canvas.width - 1, maxX + padding);
+                      maxY = Math.min(canvas.height - 1, maxY + padding);
+                      
+                      const cropWidth = maxX - minX + 1;
+                      const cropHeight = maxY - minY + 1;
+                      const tempCanvas = document.createElement('canvas');
+                      tempCanvas.width = cropWidth;
+                      tempCanvas.height = cropHeight;
+                      const tempCtx = tempCanvas.getContext('2d');
+                      tempCtx.putImageData(ctx.getImageData(minX, minY, cropWidth, cropHeight), 0, 0);
+                      const scaleFactor = cropWidth / canvas.width;
+                      onVirtualCanvasComplete(tempCanvas.toDataURL(), cropWidth / cropHeight, scaleFactor);
+                    }
                   }
                 }}
                 style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}

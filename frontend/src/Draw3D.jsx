@@ -3,11 +3,11 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X, Settings } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
-function VirtualCanvasMesh({ data, isSelected }) {
+function VirtualCanvasMesh({ data, isSelected, onClick }) {
   const texture = useMemo(() => {
     const img = new Image();
     img.src = data.textureUrl;
@@ -17,7 +17,7 @@ function VirtualCanvasMesh({ data, isSelected }) {
   }, [data.textureUrl]);
 
   return (
-    <mesh position={data.position} rotation={data.rotation || [0,0,0]}>
+    <mesh position={data.position} rotation={data.rotation || [0,0,0]} scale={data.scale || 1} onClick={onClick}>
       <planeGeometry args={[data.size[0], data.size[1]]} />
       <meshStandardMaterial map={texture} transparent side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
     </mesh>
@@ -115,12 +115,13 @@ export default function Draw3D() {
   const [historyIndex, setHistoryIndex] = useState(0);
 
   const [showVirtualCanvas, setShowVirtualCanvas] = useState(false);
-  const handleVirtualCanvasComplete = (dataUrl, aspect) => {
+  const [showPropertyPanel, setShowPropertyPanel] = useState(false);
+  const handleVirtualCanvasComplete = (dataUrl, aspect, scaleFactor = 1) => {
     setShowVirtualCanvas(false);
     setIsDrawingMode(true);
     setTool('lasso');
-    const sizeY = 20;
-    const sizeX = 20 * aspect;
+    const sizeY = 20 * scaleFactor;
+    const sizeX = 20 * aspect * scaleFactor;
     const newBoard = {
       shapeType: 'virtualCanvas',
       textureUrl: dataUrl,
@@ -203,6 +204,47 @@ export default function Draw3D() {
     setTool(newTool);
     if (newTool !== 'move' && newTool !== 'lasso') {
       setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+    }
+  };
+
+  const handleObjectClick = (e, type, index) => {
+    if (showPropertyPanel) {
+      e.stopPropagation();
+      if (type === 'box') {
+        setSelection({ strokeIndices: [], boxIndices: [index], textIndices: [] });
+      } else if (type === 'text') {
+        setSelection({ strokeIndices: [], boxIndices: [], textIndices: [index] });
+      }
+    }
+  };
+
+  const updateObjectProperty = (key, value, vectorIndex = null) => {
+    if (selection.boxIndices.length > 0) {
+      const idx = selection.boxIndices[0];
+      const newBoxes = [...boxes];
+      const b = { ...newBoxes[idx] };
+      if (vectorIndex !== null) {
+        const arr = [...(b[key] || [0,0,0])];
+        arr[vectorIndex] = value;
+        b[key] = arr;
+      } else {
+        b[key] = value;
+      }
+      newBoxes[idx] = b;
+      setBoxes(newBoxes);
+    } else if (selection.textIndices.length > 0) {
+      const idx = selection.textIndices[0];
+      const newTexts = [...texts];
+      const t = { ...newTexts[idx] };
+      if (vectorIndex !== null) {
+        const arr = [...(t[key] || [0,0,0])];
+        arr[vectorIndex] = value;
+        t[key] = arr;
+      } else {
+        t[key] = value;
+      }
+      newTexts[idx] = t;
+      setTexts(newTexts);
     }
   };
   const [shapeType, setShapeType] = useState('box');
@@ -928,6 +970,13 @@ export default function Draw3D() {
                 >
                   <Square size={18} />
                 </button>
+                <button 
+                  onClick={() => setShowPropertyPanel(prev => !prev)} 
+                  style={{ padding: '0.5rem 1rem', background: showPropertyPanel ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="詳細設定パネル"
+                >
+                  <Settings size={18} />
+                </button>
               </>
             )}
           </div>
@@ -1095,6 +1144,84 @@ export default function Draw3D() {
         </div>
       )}
 
+      {/* 5. プロパティパネル (右側) */}
+      {showUI && showPropertyPanel && (() => {
+        const obj = selection.boxIndices.length > 0 ? boxes[selection.boxIndices[0]]
+                  : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
+                  : null;
+
+        const pos = obj?.position || [0, 0, 0];
+        const rot = obj?.rotation || [0, 0, 0];
+        const scale = obj?.scale || 1;
+        const rotYDeg = Math.round(rot[1] * 180 / Math.PI);
+        const rotXDeg = Math.round(rot[0] * 180 / Math.PI);
+
+        return (
+        <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <span>詳細設定</span>
+          </div>
+          
+          {!obj ? (
+            <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+              仮想キャンバスや図形を<br/>クリックして選択してください
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>X座標</label>
+                  <input type="number" step="0.1" value={Number(pos[0]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 0)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Y座標</label>
+                  <input type="number" step="0.1" value={Number(pos[1]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 1)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Z座標</label>
+                  <input type="number" step="0.1" value={Number(pos[2]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 2)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              
+              <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>横の角度 (Y軸)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="number" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+                  </div>
+                </div>
+                <input type="range" min="-180" max="180" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '100%' }} />
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>縦の角度 (X軸)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="number" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+                  </div>
+                </div>
+                <input type="range" min="-180" max="180" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '100%' }} />
+              </div>
+            </>
+          )}
+
+          <button 
+            onClick={() => {
+              setShowPropertyPanel(false);
+              setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+            }} 
+            style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+          >
+            設定終了
+          </button>
+        </div>
+        );
+      })()}
+
       {showUI && (
         <div style={{ position: 'absolute', bottom: '20px', left: '0', width: '100%', textAlign: 'center', color: 'var(--text-main)', pointerEvents: 'none', fontWeight: 'bold', fontSize: '1.2rem', textShadow: '0 2px 4px rgba(255,255,255,0.8)', zIndex: 10 }}>
           {!isDrawingMode 
@@ -1182,10 +1309,10 @@ export default function Draw3D() {
             const isSelected = selection?.boxIndices.includes(index);
             const type = b.shapeType || 'box';
             if (type === 'virtualCanvas') {
-              return <VirtualCanvasMesh key={`b-${index}`} data={b} isSelected={isSelected} />;
+              return <VirtualCanvasMesh key={`b-${index}`} data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />;
             }
             return (
-              <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0,0,0]}>
+              <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0,0,0]} scale={b.scale || 1} onClick={(e) => handleObjectClick(e, 'box', index)}>
                 {type === 'box' && <boxGeometry args={b.size} />}
                 {type === 'sphere' && <sphereGeometry args={[b.size[0]/2, 32, 32]} />}
                 {type === 'cone' && <coneGeometry args={[b.size[0]/2, b.size[0], 32]} />}
@@ -1221,10 +1348,12 @@ export default function Draw3D() {
                 key={`t-${index}`} 
                 position={t.position} 
                 rotation={t.rotation || [0,0,0]}
+                scale={t.scale || 1}
                 color={isSelected ? '#ffffff' : t.color} 
                 fontSize={t.size} 
                 anchorX="center" 
                 anchorY="middle"
+                onClick={(e) => handleObjectClick(e, 'text', index)}
               >
                 {t.text}
               </Text>
