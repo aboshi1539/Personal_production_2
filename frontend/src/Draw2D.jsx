@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload } from 'lucide-react';
+import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut } from 'lucide-react';
 import './index.css';
 
 export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = 'plane', onVirtualCanvasComplete, onVirtualCanvasCancel }) {
@@ -25,6 +25,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   const [showConfirmHome, setShowConfirmHome] = useState(false);
   const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
   const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
+  const [globalZoom, setGlobalZoom] = useState(1);
 
   const [cubeFaceIndex, setCubeFaceIndex] = useState(4); // 4 = Front
   const [cubeFacesState, setCubeFacesState] = useState(
@@ -299,13 +300,13 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     const rect = canvasRef.current.getBoundingClientRect();
     if (e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
       return {
-        x: e.nativeEvent.touches[0].clientX - rect.left,
-        y: e.nativeEvent.touches[0].clientY - rect.top
+        x: (e.nativeEvent.touches[0].clientX - rect.left) / globalZoom,
+        y: (e.nativeEvent.touches[0].clientY - rect.top) / globalZoom
       };
     }
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: (e.clientX - rect.left) / globalZoom,
+      y: (e.clientY - rect.top) / globalZoom
     };
   };
 
@@ -796,45 +797,48 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
-      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-        <button 
-          className="start-button" 
-          onClick={() => setShowUI(!showUI)} 
-          title={showUI ? "メニューを非表示" : "メニューを表示"}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
-        >
-          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
+      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         
         {showUI && (
           <>
-            {!isVirtualCanvas && (
-              <button className="start-button" onClick={() => {
-                if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
-                  setShowConfirmHome(true);
-                } else {
-                  navigate('/');
-                }
-              }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-                <HomeIcon size={20} /> 
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                className="start-button" 
+                onClick={undo} 
+                disabled={historyIndex <= 0}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <Undo2 size={20} /> 
               </button>
-            )}
-            <button 
-              className="start-button" 
-              onClick={undo} 
-              disabled={historyIndex <= 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
-            >
-              <Undo2 size={20} /> 
-            </button>
-            <button 
-              className="start-button" 
-              onClick={redo} 
-              disabled={historyIndex >= history.length - 1}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-            >
-              <Redo2 size={20} /> 
-            </button>
+              <button 
+                className="start-button" 
+                onClick={redo} 
+                disabled={historyIndex >= history.length - 1}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+              >
+                <Redo2 size={20} /> 
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="start-button"
+                onClick={() => setGlobalZoom(prev => Math.min(prev * 1.2, 5))}
+                title="ズームイン"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomIn size={20} />
+              </button>
+              <button
+                className="start-button"
+                onClick={() => setGlobalZoom(prev => Math.max(prev / 1.2, 0.2))}
+                title="ズームアウト"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomOut size={20} />
+              </button>
+            </div>
+
             {isVirtualCanvas && (
               <>
                 <button 
@@ -980,7 +984,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
       {/* 2. カラーパレット (右側縦並び) */}
       {showUI && tool !== 'lasso' && tool !== 'eyedropper' && (
-        <div style={{ position: 'absolute', top: '50%', right: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '130px', right: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem' }}>カラー</div>
           {replaceModeColor && (
             <div style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '0.2rem', textAlign: 'center', width: '100%' }}>
@@ -1029,7 +1033,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
       {/* 3. ペン/消しゴムの太さ (左側縦並び) */}
       {showUI && tool !== 'lasso' && tool !== 'eyedropper' && tool !== 'fill' && tool !== 'text' && (
-        <div style={{ position: 'absolute', top: '50%', left: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', background: 'rgba(255,255,255,0.9)', padding: '1rem 0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '130px', left: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', background: 'rgba(255,255,255,0.9)', padding: '1rem 0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.2rem', textAlign: 'center', width: '50px' }}>
             {tool === 'eraser' ? '消しゴムの太さ' : 'ペンの太さ'}
           </div>
@@ -1087,6 +1091,29 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           </button>
         </div>
       )}
+
+      {/* 画面右下 (ホームと非表示ボタン) */}
+      <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <button 
+          className="start-button" 
+          onClick={() => setShowUI(!showUI)} 
+          title={showUI ? "メニューを非表示" : "メニューを表示"}
+          style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+        {!isVirtualCanvas && (
+          <button className="start-button" onClick={() => {
+            if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
+              setShowConfirmHome(true);
+            } else {
+              navigate('/');
+            }
+          }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <HomeIcon size={20} /> 
+          </button>
+        )}
+      </div>
 
       {showUI && isVirtualCanvas && virtualCanvasShape === 'cube' && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
@@ -1228,7 +1255,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           onPointerMove={draw}
           onPointerUp={finishDrawing}
           onPointerCancel={finishDrawing}
-          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none', transform: `scale(${globalZoom})`, transformOrigin: 'center' }}
         />
       </div>
 

@@ -887,6 +887,20 @@ export default function Draw3D() {
     setTimeout(() => saveHistory([], [], []), 0);
   };
 
+  const handleZoomIn = () => {
+    if (cameraRef.current) {
+      cameraRef.current.zoom = Math.min(cameraRef.current.zoom * 1.2, 5);
+      cameraRef.current.updateProjectionMatrix();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (cameraRef.current) {
+      cameraRef.current.zoom = Math.max(cameraRef.current.zoom / 1.2, 0.2);
+      cameraRef.current.updateProjectionMatrix();
+    }
+  };
+
   const handleSaveData = () => {
     const data = {
       strokes: strokesRef.current,
@@ -927,52 +941,51 @@ export default function Draw3D() {
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            className="start-button"
-            onClick={() => setShowUI(!showUI)}
-            title={showUI ? "メニューを非表示" : "メニューを表示"}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
-          >
-            {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-          </button>
-
-          {showUI && (
-            <>
-              <button className="start-button" onClick={() => {
-                const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
-                if (historyIndex > lastSavedIndex && !isEmpty) {
-                  setShowConfirmHome(true);
-                } else {
-                  navigate('/');
-                }
-              }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-                <HomeIcon size={20} />
-              </button>
-              <button
-                className="start-button"
-                onClick={undo}
-                disabled={historyIndex === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
-              >
-                <Undo2 size={20} />
-              </button>
-              <button
-                className="start-button"
-                onClick={redo}
-                disabled={historyIndex >= history.length - 1}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-              >
-                <Redo2 size={20} />
-              </button>
-            </>
-          )}
-        </div>
+        {showUI && (
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="start-button"
+              onClick={undo}
+              disabled={historyIndex === 0}
+              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              <Undo2 size={20} />
+            </button>
+            <button
+              className="start-button"
+              onClick={redo}
+              disabled={historyIndex >= history.length - 1}
+              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+            >
+              <Redo2 size={20} />
+            </button>
+          </div>
+        )}
+        {showUI && (
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="start-button"
+              onClick={handleZoomIn}
+              title="ズームイン"
+              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <ZoomIn size={20} />
+            </button>
+            <button
+              className="start-button"
+              onClick={handleZoomOut}
+              title="ズームアウト"
+              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <ZoomOut size={20} />
+            </button>
+          </div>
+        )}
         {showUI && (
           <button
             className="start-button"
             onClick={handleResetCamera}
-            style={{ alignSelf: 'flex-start', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1rem' }}
+            style={{ alignSelf: 'flex-start', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
           >
             正面に戻る
           </button>
@@ -994,12 +1007,36 @@ export default function Draw3D() {
         </div>
       )}
 
+      {/* 画面右下 (ホームと非表示ボタン) */}
+      <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <button
+          className="start-button"
+          onClick={() => setShowUI(!showUI)}
+          title={showUI ? "メニューを非表示" : "メニューを表示"}
+          style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+        {showUI && (
+          <button className="start-button" onClick={() => {
+            const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
+            if (historyIndex > lastSavedIndex && !isEmpty) {
+              setShowConfirmHome(true);
+            } else {
+              navigate('/');
+            }
+          }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <HomeIcon size={20} />
+          </button>
+        )}
+      </div>
+
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: 'max-content', maxWidth: 'calc(100vw - 650px)' }}>
+        <div style={{ position: 'absolute', top: '20px', left: '130px', right: '290px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', pointerEvents: 'none' }}>
 
           {/* モード切替とツール */}
-          <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button
               onClick={() => {
                 setIsDrawingMode(true);
@@ -1022,9 +1059,9 @@ export default function Draw3D() {
                 setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
               }}
               style={{ padding: '0.5rem 1rem', background: !isDrawingMode ? '#334155' : '#fff', color: !isDrawingMode ? '#fff' : 'var(--text-main)', border: '1px solid #334155', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="視点移動"
+              title="その他のツール"
             >
-              <Move3d size={18} />
+              <Settings size={18} />
             </button>
 
             {isDrawingMode && (
@@ -1038,6 +1075,7 @@ export default function Draw3D() {
                 <button onClick={() => handleToolChange('fill')} title="塗りつぶし" style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
                 <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} title="図形" style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
                 <button onClick={() => handleToolChange('paint')} title="ブラシ" style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
+                <button onClick={() => handleToolChange('camera')} title="視点移動" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={18} /></button>
               </>
             )}
             {!isDrawingMode && (
@@ -1196,7 +1234,7 @@ export default function Draw3D() {
 
       {/* 2. カラーパレット (右側縦並び) */}
       {showUI && isDrawingMode && tool !== 'lasso' && tool !== 'eyedropper' && tool !== 'move' && (
-        <div style={{ position: 'absolute', top: '50%', right: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '130px', right: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem' }}>カラー</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
             {colors.map(c => (
@@ -1248,7 +1286,7 @@ export default function Draw3D() {
 
       {/* 3. ブラシ/消しゴムサイズ (左側縦並び) */}
       {showUI && isDrawingMode && (tool === 'pen' || tool === 'eraser' || tool === 'paint') && (
-        <div style={{ position: 'absolute', top: '50%', left: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '180px', left: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.8rem', textAlign: 'center', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
             {tool === 'eraser' ? '消しゴム\nサイズ' : tool === 'paint' ? 'ブラシの\n太さ' : 'ペンの\n太さ'}
           </div>
@@ -1518,7 +1556,7 @@ export default function Draw3D() {
                         : tool === 'move' ? 'ドラッグして選択中のものを移動できます'
                           : tool === 'text' ? 'クリックした場所にテキストを配置します'
                             : tool === 'fill' ? '描いた線の内側をクリックして塗りつぶします（ひと筆書き用）'
-                              : 'クリックしてコピーした絵をスタンプできます'}
+                              : '視点の移動ができます'}
         </div>
       )}
 
@@ -1528,7 +1566,7 @@ export default function Draw3D() {
           <directionalLight position={[10, 10, 5]} intensity={1} />
 
         <DrawingController
-          isActive={isDrawingMode}
+          isActive={isDrawingMode && tool !== 'camera'}
           distance={distance}
           onPointerDown3D={onPointerDown3D}
           onPointerMove3D={onPointerMove3D}
@@ -1711,7 +1749,7 @@ export default function Draw3D() {
         </Suspense>
         <OrbitControls
           ref={controlsRef}
-          enabled={!isDrawingMode}
+          enabled={!isDrawingMode || tool === 'camera'}
           enableDamping
           dampingFactor={0.05}
         />
