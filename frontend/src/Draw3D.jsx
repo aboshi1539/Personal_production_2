@@ -137,7 +137,9 @@ export default function Draw3D() {
   useEffect(() => { textsRef.current = texts; }, [texts]);
 
   const [history, setHistory] = useState([{ strokes: [], boxes: [], texts: [] }]);
+  const historyRef = useRef([{ strokes: [], boxes: [], texts: [] }]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const historyIndexRef = useRef(0);
   const [lastSavedIndex, setLastSavedIndex] = useState(0);
   const [showConfirmHome, setShowConfirmHome] = useState(false);
 
@@ -171,26 +173,39 @@ export default function Draw3D() {
   };
 
   const saveHistory = useCallback((newStrokes, newBoxes, newTexts) => {
-    setHistory(prev => {
-      const newHist = prev.slice(0, historyIndex + 1);
-      newHist.push({
-        strokes: JSON.parse(JSON.stringify(newStrokes)),
-        boxes: JSON.parse(JSON.stringify(newBoxes)),
-        texts: JSON.parse(JSON.stringify(newTexts || textsRef.current))
-      });
-      return newHist;
-    });
-    setHistoryIndex(prev => prev + 1);
-  }, [historyIndex]);
+    const currIndex = historyIndexRef.current;
+    const currHist = historyRef.current.slice(0, currIndex + 1);
+    const lastState = currHist[currHist.length - 1];
+    const newState = {
+      strokes: newStrokes,
+      boxes: newBoxes,
+      texts: newTexts || textsRef.current
+    };
+    
+    if (JSON.stringify(lastState) === JSON.stringify(newState)) {
+      return;
+    }
+    
+    currHist.push(JSON.parse(JSON.stringify(newState)));
+    historyRef.current = currHist;
+    historyIndexRef.current = currIndex + 1;
+    
+    setHistory(currHist);
+    setHistoryIndex(currIndex + 1);
+  }, []);
 
   const undo = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const prevState = history[newIndex];
+    const currIndex = historyIndexRef.current;
+    if (currIndex > 0) {
+      const newIndex = currIndex - 1;
+      const prevState = historyRef.current[newIndex];
       setStrokes(JSON.parse(JSON.stringify(prevState.strokes)));
       setBoxes(JSON.parse(JSON.stringify(prevState.boxes)));
       setTexts(JSON.parse(JSON.stringify(prevState.texts || [])));
+      
+      historyIndexRef.current = newIndex;
       setHistoryIndex(newIndex);
+      
       setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
       setCurrentStroke(null);
       setCurrentBox(null);
@@ -200,13 +215,17 @@ export default function Draw3D() {
   };
 
   const redo = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const nextState = history[newIndex];
+    const currIndex = historyIndexRef.current;
+    if (currIndex < historyRef.current.length - 1) {
+      const newIndex = currIndex + 1;
+      const nextState = historyRef.current[newIndex];
       setStrokes(JSON.parse(JSON.stringify(nextState.strokes)));
       setBoxes(JSON.parse(JSON.stringify(nextState.boxes)));
       setTexts(JSON.parse(JSON.stringify(nextState.texts || [])));
+      
+      historyIndexRef.current = newIndex;
       setHistoryIndex(newIndex);
+      
       setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
       setCurrentStroke(null);
       setCurrentBox(null);
@@ -1011,14 +1030,14 @@ export default function Draw3D() {
             {isDrawingMode && (
               <>
                 <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
-                <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
-                <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
-                <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
-                <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
-                <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
-                <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
-                <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
-                <button onClick={() => handleToolChange('paint')} style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
+                <button onClick={() => handleToolChange('pen')} title="ペン" style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
+                <button onClick={() => handleToolChange('eraser')} title="消しゴム" style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
+                <button onClick={() => handleToolChange('lasso')} title="選択・移動" style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
+                <button onClick={() => handleToolChange('eyedropper')} title="スポイト" style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
+                <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} title="テキスト" style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
+                <button onClick={() => handleToolChange('fill')} title="塗りつぶし" style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
+                <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} title="図形" style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
+                <button onClick={() => handleToolChange('paint')} title="ブラシ" style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
               </>
             )}
             {!isDrawingMode && (
