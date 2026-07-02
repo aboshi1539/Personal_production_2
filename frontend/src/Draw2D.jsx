@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload } from 'lucide-react';
 import './index.css';
 
-export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplete, onVirtualCanvasCancel }) {
+export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = 'plane', onVirtualCanvasComplete, onVirtualCanvasCancel }) {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -25,6 +25,11 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
   const [showConfirmHome, setShowConfirmHome] = useState(false);
   const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
   const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
+
+  const [cubeFaceIndex, setCubeFaceIndex] = useState(4); // 4 = Front
+  const [cubeFacesState, setCubeFacesState] = useState(
+    Array(6).fill(null).map(() => ({ history: [], historyIndex: -1 }))
+  );
 
   const [shapeType, setShapeType] = useState('circle');
   const [shapeStart, setShapeStart] = useState(null);
@@ -91,6 +96,32 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFaceSwitch = (newIndex) => {
+    if (newIndex === cubeFaceIndex) return;
+
+    const nextFaces = [...cubeFacesState];
+    nextFaces[cubeFaceIndex] = { history: [...history], historyIndex };
+    setCubeFacesState(nextFaces);
+
+    const loadFace = nextFaces[newIndex];
+    setHistory(loadFace.history);
+    setHistoryIndex(loadFace.historyIndex);
+
+    const canvas = canvasRef.current;
+    const context = contextRef.current;
+    context.globalCompositeOperation = 'source-over';
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (loadFace.historyIndex >= 0 && loadFace.history.length > 0) {
+      const img = new Image();
+      img.src = loadFace.history[loadFace.historyIndex];
+      img.onload = () => {
+        context.drawImage(img, 0, 0, canvas.width / 2, canvas.height / 2);
+      };
+    }
+
+    setCubeFaceIndex(newIndex);
+  };
 
   const commitSelectionToCanvas = (sel) => {
     const ctx = contextRef.current;
@@ -1057,6 +1088,31 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
         </div>
       )}
 
+      {showUI && isVirtualCanvas && virtualCanvasShape === 'cube' && (
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 'bold', textAlign: 'center', marginBottom: '0.5rem', color: '#475569' }}>描画する面を選択</div>
+          {['右面(Right)', '左面(Left)', '上面(Top)', '下面(Bottom)', '前面(Front)', '背面(Back)'].map((label, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleFaceSwitch(idx)}
+              style={{
+                padding: '0.6rem 1rem',
+                borderRadius: '8px',
+                background: cubeFaceIndex === idx ? '#3b82f6' : '#fff',
+                color: cubeFaceIndex === idx ? '#fff' : '#334155',
+                border: cubeFaceIndex === idx ? 'none' : '1px solid #cbd5e1',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: cubeFaceIndex === idx ? '0 2px 8px rgba(59,130,246,0.4)' : 'none'
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div 
         ref={containerRef}
         style={{ 
@@ -1068,7 +1124,8 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
           borderRadius: '12px', 
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)', 
           overflow: 'hidden',
-          border: '1px solid var(--glass-border)'
+          border: '1px solid var(--glass-border)',
+          cursor: tool === 'text' ? 'text' : tool === 'lasso' ? 'crosshair' : 'crosshair'
         }}
       >
         {tool === 'lasso' && lassoPoints.length > 0 && (
@@ -1212,42 +1269,58 @@ export default function Draw2D({ isVirtualCanvas = false, onVirtualCanvasComplet
                 onClick={() => {
                   setShowVirtualCompleteConfirm(false);
                   if (onVirtualCanvasComplete) {
-                    const canvas = canvasRef.current;
-                    const ctx = canvas.getContext('2d');
-                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const data = imgData.data;
-                    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-                    let hasPixels = false;
-                    for (let y = 0; y < canvas.height; y++) {
-                      for (let x = 0; x < canvas.width; x++) {
-                        const alpha = data[(y * canvas.width + x) * 4 + 3];
-                        if (alpha > 0) {
-                          if (x < minX) minX = x;
-                          if (x > maxX) maxX = x;
-                          if (y < minY) minY = y;
-                          if (y > maxY) maxY = y;
-                          hasPixels = true;
+                    if (virtualCanvasShape === 'cube') {
+                      const canvas = canvasRef.current;
+                      const currentDataUrl = canvas.toDataURL();
+                      const nextFaces = [...cubeFacesState];
+                      nextFaces[cubeFaceIndex] = { history: [...history], historyIndex };
+                      
+                      const urls = nextFaces.map((f, i) => {
+                        if (i === cubeFaceIndex) return currentDataUrl;
+                        if (f.historyIndex >= 0 && f.history.length > 0) {
+                           return f.history[f.historyIndex];
+                        }
+                        return '';
+                      });
+                      onVirtualCanvasComplete(urls, 1, 1, 'cube');
+                    } else {
+                      const canvas = canvasRef.current;
+                      const ctx = canvas.getContext('2d');
+                      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                      const data = imgData.data;
+                      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+                      let hasPixels = false;
+                      for (let y = 0; y < canvas.height; y++) {
+                        for (let x = 0; x < canvas.width; x++) {
+                          const alpha = data[(y * canvas.width + x) * 4 + 3];
+                          if (alpha > 0) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                            hasPixels = true;
+                          }
                         }
                       }
-                    }
-                    if (!hasPixels) {
-                      onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height, 1);
-                    } else {
-                      const padding = 2; // small padding to prevent edge clipping
-                      minX = Math.max(0, minX - padding);
-                      minY = Math.max(0, minY - padding);
-                      maxX = Math.min(canvas.width - 1, maxX + padding);
-                      maxY = Math.min(canvas.height - 1, maxY + padding);
-                      
-                      const cropWidth = maxX - minX + 1;
-                      const cropHeight = maxY - minY + 1;
-                      const tempCanvas = document.createElement('canvas');
-                      tempCanvas.width = cropWidth;
-                      tempCanvas.height = cropHeight;
-                      const tempCtx = tempCanvas.getContext('2d');
-                      tempCtx.putImageData(ctx.getImageData(minX, minY, cropWidth, cropHeight), 0, 0);
-                      const scaleFactor = cropWidth / canvas.width;
-                      onVirtualCanvasComplete(tempCanvas.toDataURL(), cropWidth / cropHeight, scaleFactor);
+                      if (!hasPixels) {
+                        onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height, 1, 'plane');
+                      } else {
+                        const padding = 2; // small padding to prevent edge clipping
+                        minX = Math.max(0, minX - padding);
+                        minY = Math.max(0, minY - padding);
+                        maxX = Math.min(canvas.width - 1, maxX + padding);
+                        maxY = Math.min(canvas.height - 1, maxY + padding);
+                        
+                        const cropWidth = maxX - minX + 1;
+                        const cropHeight = maxY - minY + 1;
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = cropWidth;
+                        tempCanvas.height = cropHeight;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.putImageData(ctx.getImageData(minX, minY, cropWidth, cropHeight), 0, 0);
+                        const scaleFactor = cropWidth / canvas.width;
+                        onVirtualCanvasComplete(tempCanvas.toDataURL(), cropWidth / cropHeight, scaleFactor, 'plane');
+                      }
                     }
                   }
                 }}

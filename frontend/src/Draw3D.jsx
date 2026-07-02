@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Line, Environment, Grid, Text } from '@react-three/drei';
+import { OrbitControls, Line, Environment, Grid, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X, Settings } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X, Settings, Maximize, Palette, Play, Pause } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
@@ -17,9 +17,34 @@ function VirtualCanvasMesh({ data, isSelected, onClick }) {
   }, [data.textureUrl]);
 
   return (
-    <mesh position={data.position} rotation={data.rotation || [0,0,0]} scale={data.scale || 1} onClick={onClick}>
+    <mesh position={data.position} rotation={data.rotation || [0, 0, 0]} scale={data.scale || 1} onClick={onClick}>
       <planeGeometry args={[data.size[0], data.size[1]]} />
-      <meshStandardMaterial map={texture} transparent side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
+      <meshStandardMaterial map={texture} transparent opacity={data.opacity ?? 1.0} side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
+    </mesh>
+  );
+}
+
+function VirtualCanvasCubeMesh({ data, isSelected, onClick }) {
+  const materials = useMemo(() => {
+    return (data.textureUrls || Array(6).fill('')).map((url) => {
+      const img = new Image();
+      img.src = url || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const tex = new THREE.Texture(img);
+      img.onload = () => tex.needsUpdate = true;
+      return new THREE.MeshStandardMaterial({
+        map: tex,
+        transparent: true,
+        opacity: data.opacity ?? 1.0,
+        emissive: isSelected ? '#ffffff' : '#000000',
+        emissiveIntensity: isSelected ? 0.4 : 0,
+        alphaTest: 0.01
+      });
+    });
+  }, [data.textureUrls, isSelected, data.opacity]);
+
+  return (
+    <mesh position={data.position} rotation={data.rotation || [0, 0, 0]} scale={data.scale || 1} onClick={onClick} material={materials}>
+      <boxGeometry args={data.size || [20, 20, 20]} />
     </mesh>
   );
 }
@@ -45,7 +70,7 @@ function DrawingController({ isActive, distance, onPointerDown3D, onPointerMove3
       const rect = gl.domElement.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      
+
       const vec = new THREE.Vector3(x, y, 0.5);
       vec.unproject(camera);
       vec.sub(camera.position).normalize();
@@ -96,7 +121,7 @@ export default function Draw3D() {
   const [strokes, setStrokes] = useState([]);
   const [boxes, setBoxes] = useState([]);
   const [texts, setTexts] = useState([]);
-  
+
   const strokesRef = useRef([]);
   const boxesRef = useRef([]);
   const textsRef = useRef([]);
@@ -113,21 +138,29 @@ export default function Draw3D() {
 
   const [history, setHistory] = useState([{ strokes: [], boxes: [], texts: [] }]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const [lastSavedIndex, setLastSavedIndex] = useState(0);
+  const [showConfirmHome, setShowConfirmHome] = useState(false);
 
   const [showVirtualCanvas, setShowVirtualCanvas] = useState(false);
+  const [showVirtualCanvasMenu, setShowVirtualCanvasMenu] = useState(false);
+  const [virtualCanvasShape, setVirtualCanvasShape] = useState('plane');
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
-  const handleVirtualCanvasComplete = (dataUrl, aspect, scaleFactor = 1) => {
+  const [showResizePanel, setShowResizePanel] = useState(false);
+  const [showAppearancePanel, setShowAppearancePanel] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const handleVirtualCanvasComplete = (dataUrlOrUrls, aspect, scaleFactor = 1, shape = 'plane') => {
     setShowVirtualCanvas(false);
     setIsDrawingMode(true);
     setTool('lasso');
     const sizeY = 20 * scaleFactor;
     const sizeX = 20 * aspect * scaleFactor;
     const newBoard = {
-      shapeType: 'virtualCanvas',
-      textureUrl: dataUrl,
+      shapeType: shape === 'cube' ? 'virtualCanvasCube' : 'virtualCanvas',
+      textureUrl: shape === 'cube' ? undefined : dataUrlOrUrls,
+      textureUrls: shape === 'cube' ? dataUrlOrUrls : undefined,
       position: [cameraRef.current ? cameraRef.current.position.x : 0, 5, 0],
       rotation: [0, 0, 0],
-      size: [sizeX, sizeY, 0],
+      size: shape === 'cube' ? [20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor] : [sizeX, sizeY, 0],
       color: '#ffffff'
     };
     setBoxes(prev => {
@@ -140,8 +173,8 @@ export default function Draw3D() {
   const saveHistory = useCallback((newStrokes, newBoxes, newTexts) => {
     setHistory(prev => {
       const newHist = prev.slice(0, historyIndex + 1);
-      newHist.push({ 
-        strokes: JSON.parse(JSON.stringify(newStrokes)), 
+      newHist.push({
+        strokes: JSON.parse(JSON.stringify(newStrokes)),
         boxes: JSON.parse(JSON.stringify(newBoxes)),
         texts: JSON.parse(JSON.stringify(newTexts || textsRef.current))
       });
@@ -186,12 +219,12 @@ export default function Draw3D() {
   const [currentBox, setCurrentBox] = useState(null);
   const [lassoPoints3D, setLassoPoints3D] = useState([]);
   const [lassoPointsNDC, setLassoPointsNDC] = useState([]);
-  
+
   const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
-  
+
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [tool, setTool] = useState('pen'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
-  
+
   const [brushColor, setBrushColor] = useState('#ef4444');
   const [brushSize, setBrushSize] = useState(3);
   const [eraserSize, setEraserSize] = useState(3);
@@ -208,7 +241,7 @@ export default function Draw3D() {
   };
 
   const handleObjectClick = (e, type, index) => {
-    if (showPropertyPanel) {
+    if (showPropertyPanel || showResizePanel || showAppearancePanel) {
       e.stopPropagation();
       if (type === 'box') {
         setSelection({ strokeIndices: [], boxIndices: [index], textIndices: [] });
@@ -219,37 +252,45 @@ export default function Draw3D() {
   };
 
   const updateObjectProperty = (key, value, vectorIndex = null) => {
+    const applyUpdate = (obj) => {
+      if (key === 'scaleAllProportional') {
+        let currentVal = obj.scale;
+        if (currentVal === undefined) currentVal = [1, 1, 1];
+        if (typeof currentVal === 'number') currentVal = [currentVal, currentVal, currentVal];
+        const oldBase = currentVal[0];
+        const ratio = oldBase > 0 ? value / oldBase : 1;
+        obj.scale = [currentVal[0] * ratio, currentVal[1] * ratio, currentVal[2] * ratio];
+      } else if (vectorIndex !== null) {
+        let currentVal = obj[key];
+        if (currentVal === undefined) currentVal = (key === 'scale' ? [1, 1, 1] : [0, 0, 0]);
+        if (typeof currentVal === 'number') currentVal = [currentVal, currentVal, currentVal];
+        const arr = [...currentVal];
+        arr[vectorIndex] = value;
+        obj[key] = arr;
+      } else {
+        obj[key] = value;
+      }
+    };
+
     if (selection.boxIndices.length > 0) {
       const idx = selection.boxIndices[0];
       const newBoxes = [...boxes];
       const b = { ...newBoxes[idx] };
-      if (vectorIndex !== null) {
-        const arr = [...(b[key] || [0,0,0])];
-        arr[vectorIndex] = value;
-        b[key] = arr;
-      } else {
-        b[key] = value;
-      }
+      applyUpdate(b);
       newBoxes[idx] = b;
       setBoxes(newBoxes);
     } else if (selection.textIndices.length > 0) {
       const idx = selection.textIndices[0];
       const newTexts = [...texts];
       const t = { ...newTexts[idx] };
-      if (vectorIndex !== null) {
-        const arr = [...(t[key] || [0,0,0])];
-        arr[vectorIndex] = value;
-        t[key] = arr;
-      } else {
-        t[key] = value;
-      }
+      applyUpdate(t);
       newTexts[idx] = t;
       setTexts(newTexts);
     }
   };
   const [shapeType, setShapeType] = useState('box');
   const [showSubMenu, setShowSubMenu] = useState(true);
-  
+
   const [copiedArt, setCopiedArt] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
   const [savedColors, setSavedColors] = useState([]);
@@ -259,7 +300,7 @@ export default function Draw3D() {
   const moveInitialStateRef = useRef(null);
   const cameraRef = useRef();
 
-  const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#a855f7', '#f97316', '#8b4513', '#38bdf8', '#166534','#333333', '#9ca3af', '#ffffff'];
+  const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#a855f7', '#f97316', '#8b4513', '#38bdf8', '#166534', '#333333', '#9ca3af', '#ffffff'];
   const eraserRadiusMap = { 1: 0.5, 2: 1.0, 3: 1.5, 4: 2.5, 5: 4.0 };
   const brushSizeMap = { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 };
 
@@ -267,7 +308,7 @@ export default function Draw3D() {
     let strokesToCopy;
     let boxesToCopy;
     let textsToCopy;
-    
+
     if (selection.strokeIndices.length > 0 || selection.boxIndices.length > 0 || selection.textIndices.length > 0) {
       strokesToCopy = selection.strokeIndices.map(i => strokesRef.current[i]);
       boxesToCopy = selection.boxIndices.map(i => boxesRef.current[i]);
@@ -279,7 +320,7 @@ export default function Draw3D() {
     }
 
     if (strokesToCopy.length === 0 && boxesToCopy.length === 0 && textsToCopy.length === 0) return;
-    
+
     let count = 0;
     const center = new THREE.Vector3();
     strokesToCopy.forEach(s => s.points.forEach(p => {
@@ -295,7 +336,7 @@ export default function Draw3D() {
       count++;
     });
     if (count > 0) center.divideScalar(count);
-    
+
     setCopiedArt({
       strokes: JSON.parse(JSON.stringify(strokesToCopy)),
       boxes: JSON.parse(JSON.stringify(boxesToCopy)),
@@ -309,7 +350,7 @@ export default function Draw3D() {
 
   const handleScale = (factor) => {
     if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
-    
+
     let count = 0;
     const center = new THREE.Vector3();
     selection.strokeIndices.forEach(idx => {
@@ -338,8 +379,8 @@ export default function Draw3D() {
     const nextBoxes = [...boxesRef.current];
     selection.boxIndices.forEach(idx => {
       const b = nextBoxes[idx];
-      nextBoxes[idx] = { 
-        ...b, 
+      nextBoxes[idx] = {
+        ...b,
         position: [
           center.x + (b.position[0] - center.x) * factor,
           center.y + (b.position[1] - center.y) * factor,
@@ -352,8 +393,8 @@ export default function Draw3D() {
     const nextTexts = [...textsRef.current];
     selection.textIndices.forEach(idx => {
       const t = nextTexts[idx];
-      nextTexts[idx] = { 
-        ...t, 
+      nextTexts[idx] = {
+        ...t,
         position: [
           center.x + (t.position[0] - center.x) * factor,
           center.y + (t.position[1] - center.y) * factor,
@@ -371,7 +412,7 @@ export default function Draw3D() {
 
   const handleRotate = (axis, angleDeg) => {
     if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
-    
+
     let count = 0;
     const center = new THREE.Vector3();
     selection.strokeIndices.forEach(idx => {
@@ -394,7 +435,7 @@ export default function Draw3D() {
       let dy = p[1] - center.y;
       let dz = p[2] - center.z;
       let nx = dx, ny = dy, nz = dz;
-      
+
       if (axis === 'x') {
         ny = dy * cos - dz * sin;
         nz = dy * sin + dz * cos;
@@ -420,7 +461,7 @@ export default function Draw3D() {
     selection.boxIndices.forEach(idx => {
       const b = nextBoxes[idx];
       const np = rotatePoint(b.position);
-      const rot = b.rotation ? [...b.rotation] : [0,0,0];
+      const rot = b.rotation ? [...b.rotation] : [0, 0, 0];
       if (axis === 'x') rot[0] += angle;
       if (axis === 'y') rot[1] += angle;
       if (axis === 'z') rot[2] += angle;
@@ -431,7 +472,7 @@ export default function Draw3D() {
     selection.textIndices.forEach(idx => {
       const t = nextTexts[idx];
       const np = rotatePoint(t.position);
-      const rot = t.rotation ? [...t.rotation] : [0,0,0];
+      const rot = t.rotation ? [...t.rotation] : [0, 0, 0];
       if (axis === 'x') rot[0] += angle;
       if (axis === 'y') rot[1] += angle;
       if (axis === 'z') rot[2] += angle;
@@ -446,7 +487,7 @@ export default function Draw3D() {
 
   const handleFlip = (axis) => {
     if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
-    
+
     let count = 0;
     const center = new THREE.Vector3();
     selection.strokeIndices.forEach(idx => {
@@ -497,13 +538,13 @@ export default function Draw3D() {
     setStrokes(nextStrokes);
     setBoxes(nextBoxes);
     setTexts(nextTexts);
-    
+
     if (moveInitialStateRef.current) {
-       moveInitialStateRef.current.strokes = JSON.parse(JSON.stringify(nextStrokes));
-       moveInitialStateRef.current.boxes = JSON.parse(JSON.stringify(nextBoxes));
-       moveInitialStateRef.current.texts = JSON.parse(JSON.stringify(nextTexts));
+      moveInitialStateRef.current.strokes = JSON.parse(JSON.stringify(nextStrokes));
+      moveInitialStateRef.current.boxes = JSON.parse(JSON.stringify(nextBoxes));
+      moveInitialStateRef.current.texts = JSON.parse(JSON.stringify(nextTexts));
     }
-    
+
     setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
   };
 
@@ -512,12 +553,12 @@ export default function Draw3D() {
     const dx = pos[0] - copiedArt.centroid[0];
     const dy = pos[1] - copiedArt.centroid[1];
     const dz = pos[2] - copiedArt.centroid[2];
-    
+
     const newStrokes = copiedArt.strokes.map(s => ({
       ...s,
       points: s.points.map(p => [p[0] + dx, p[1] + dy, p[2] + dz])
     }));
-    
+
     const newBoxes = copiedArt.boxes.map(b => ({
       ...b,
       position: [b.position[0] + dx, b.position[1] + dy, b.position[2] + dz]
@@ -527,7 +568,7 @@ export default function Draw3D() {
       ...t,
       position: [t.position[0] + dx, t.position[1] + dy, t.position[2] + dz]
     }));
-    
+
     const finalStrokes = [...strokesRef.current, ...newStrokes];
     const finalBoxes = [...boxesRef.current, ...newBoxes];
     const finalTexts = [...textsRef.current, ...newTexts];
@@ -582,7 +623,7 @@ export default function Draw3D() {
     } else if (tool === 'fill') {
       let foundStrokeIndex = -1;
       let minArea = Infinity;
-      
+
       if (cameraRef.current) {
         strokesRef.current.forEach((s, i) => {
           if (s.points.length < 3) return;
@@ -593,8 +634,8 @@ export default function Draw3D() {
           if (pointInPolygon(posNDC, projected)) {
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             projected.forEach(p => {
-              if(p[0]<minX) minX=p[0]; if(p[0]>maxX) maxX=p[0];
-              if(p[1]<minY) minY=p[1]; if(p[1]>maxY) maxY=p[1];
+              if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
+              if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
             });
             const area = (maxX - minX) * (maxY - minY);
             if (area < minArea) {
@@ -641,7 +682,7 @@ export default function Draw3D() {
         if (lastPoint) {
           const dist = new THREE.Vector3(...lastPoint).distanceTo(new THREE.Vector3(...pos3D));
           // Filter out points that are too close to prevent Line2 spiky joint artifacts
-          if (dist < 0.05) return prev; 
+          if (dist < 0.05) return prev;
         }
         return { ...prev, points: [...prev.points, pos3D] };
       });
@@ -654,7 +695,7 @@ export default function Draw3D() {
       const p = new THREE.Vector3(...pos3D);
       const currentBrushRadius = eraserRadiusMap[eraserSize];
       let changed = false;
-      
+
       const nextStrokes = strokesRef.current.map(s => {
         const hit = s.points.some(pt => new THREE.Vector3(...pt).distanceTo(p) < currentBrushRadius);
         if (hit) {
@@ -662,15 +703,15 @@ export default function Draw3D() {
           if (tool === 'paint') {
             if (s.color !== brushColor || (s.fillColor && s.fillColor !== brushColor)) {
               changed = true;
-              return { ...s, color: brushColor, ...(s.fillColor ? {fillColor: brushColor} : {}) };
+              return { ...s, color: brushColor, ...(s.fillColor ? { fillColor: brushColor } : {}) };
             }
           }
         }
         return s;
       }).filter(Boolean);
-      
+
       if (tool === 'eraser' && nextStrokes.length !== strokesRef.current.length) changed = true;
-      
+
       const nextBoxes = boxesRef.current.map(b => {
         const hit = new THREE.Vector3(...b.position).distanceTo(p) < (b.size[0] / 2 + currentBrushRadius);
         if (hit) {
@@ -682,7 +723,7 @@ export default function Draw3D() {
         }
         return b;
       }).filter(Boolean);
-      
+
       if (tool === 'eraser' && nextBoxes.length !== boxesRef.current.length) changed = true;
 
       const nextTexts = textsRef.current.map(t => {
@@ -696,15 +737,15 @@ export default function Draw3D() {
         }
         return t;
       }).filter(Boolean);
-      
+
       if (tool === 'eraser' && nextTexts.length !== textsRef.current.length) changed = true;
-      
+
       if (changed) {
         modifiedSomethingRef.current = true;
         setStrokes(nextStrokes);
         setBoxes(nextBoxes);
         setTexts(nextTexts);
-        
+
         // Clear selection if objects are erased or painted to avoid indices shifting issues
         if (tool === 'eraser') setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
       }
@@ -713,33 +754,33 @@ export default function Draw3D() {
         const dx = pos3D[0] - moveStartRef.current[0];
         const dy = pos3D[1] - moveStartRef.current[1];
         const dz = pos3D[2] - moveStartRef.current[2];
-        
+
         const nextStrokes = [...strokesRef.current];
         selection.strokeIndices.forEach(idx => {
-           if (moveInitialStateRef.current.strokes[idx]) {
-             nextStrokes[idx] = { 
-               ...moveInitialStateRef.current.strokes[idx], 
-               points: moveInitialStateRef.current.strokes[idx].points.map(pt => [pt[0]+dx, pt[1]+dy, pt[2]+dz]) 
-             };
-           }
+          if (moveInitialStateRef.current.strokes[idx]) {
+            nextStrokes[idx] = {
+              ...moveInitialStateRef.current.strokes[idx],
+              points: moveInitialStateRef.current.strokes[idx].points.map(pt => [pt[0] + dx, pt[1] + dy, pt[2] + dz])
+            };
+          }
         });
         setStrokes(nextStrokes);
-        
+
         const nextBoxes = [...boxesRef.current];
         selection.boxIndices.forEach(idx => {
-           if (moveInitialStateRef.current.boxes[idx]) {
-             const b = moveInitialStateRef.current.boxes[idx];
-             nextBoxes[idx] = { ...b, position: [b.position[0]+dx, b.position[1]+dy, b.position[2]+dz] };
-           }
+          if (moveInitialStateRef.current.boxes[idx]) {
+            const b = moveInitialStateRef.current.boxes[idx];
+            nextBoxes[idx] = { ...b, position: [b.position[0] + dx, b.position[1] + dy, b.position[2] + dz] };
+          }
         });
         setBoxes(nextBoxes);
 
         const nextTexts = [...textsRef.current];
         selection.textIndices.forEach(idx => {
-           if (moveInitialStateRef.current.texts[idx]) {
-             const t = moveInitialStateRef.current.texts[idx];
-             nextTexts[idx] = { ...t, position: [t.position[0]+dx, t.position[1]+dy, t.position[2]+dz] };
-           }
+          if (moveInitialStateRef.current.texts[idx]) {
+            const t = moveInitialStateRef.current.texts[idx];
+            nextTexts[idx] = { ...t, position: [t.position[0] + dx, t.position[1] + dy, t.position[2] + dz] };
+          }
         });
         setTexts(nextTexts);
       }
@@ -761,9 +802,9 @@ export default function Draw3D() {
         if (prev) {
           const size = new THREE.Vector3(...prev.endPos).distanceTo(new THREE.Vector3(...prev.startPos)) * 2;
           if (size > 0.1) {
-             const newBoxes = [...boxesRef.current, { position: prev.startPos, size: [size, size, size], color: prev.color, shapeType: prev.shapeType }];
-             setBoxes(newBoxes);
-             setTimeout(() => saveHistory(strokesRef.current, newBoxes, textsRef.current), 0);
+            const newBoxes = [...boxesRef.current, { position: prev.startPos, size: [size, size, size], color: prev.color, shapeType: prev.shapeType }];
+            setBoxes(newBoxes);
+            setTimeout(() => saveHistory(strokesRef.current, newBoxes, textsRef.current), 0);
           }
         }
         return null;
@@ -786,7 +827,7 @@ export default function Draw3D() {
         }
         if (inLasso) strokeIndices.push(i);
       });
-      
+
       const boxIndices = [];
       boxesRef.current.forEach((b, i) => {
         const v = new THREE.Vector3(...b.position).project(cameraRef.current);
@@ -802,7 +843,7 @@ export default function Draw3D() {
           textIndices.push(i);
         }
       });
-      
+
       setSelection({ strokeIndices, boxIndices, textIndices });
       if (strokeIndices.length > 0 || boxIndices.length > 0 || textIndices.length > 0) {
         setTool('move');
@@ -842,6 +883,7 @@ export default function Draw3D() {
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
+    setLastSavedIndex(historyIndex);
   };
 
   const handleLoadData = (e) => {
@@ -867,43 +909,50 @@ export default function Draw3D() {
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button 
-            className="start-button" 
-            onClick={() => setShowUI(!showUI)} 
+          <button
+            className="start-button"
+            onClick={() => setShowUI(!showUI)}
             title={showUI ? "メニューを非表示" : "メニューを表示"}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
           >
             {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
-          
+
           {showUI && (
             <>
-              <button className="start-button" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-                <HomeIcon size={20} /> 
+              <button className="start-button" onClick={() => {
+                const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
+                if (historyIndex > lastSavedIndex && !isEmpty) {
+                  setShowConfirmHome(true);
+                } else {
+                  navigate('/');
+                }
+              }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
+                <HomeIcon size={20} />
               </button>
-              <button 
-                className="start-button" 
-                onClick={undo} 
+              <button
+                className="start-button"
+                onClick={undo}
                 disabled={historyIndex === 0}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
               >
-                <Undo2 size={20} /> 
+                <Undo2 size={20} />
               </button>
-              <button 
-                className="start-button" 
-                onClick={redo} 
+              <button
+                className="start-button"
+                onClick={redo}
                 disabled={historyIndex >= history.length - 1}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
               >
-                <Redo2 size={20} /> 
+                <Redo2 size={20} />
               </button>
             </>
           )}
         </div>
         {showUI && (
-          <button 
+          <button
             className="start-button"
-            onClick={handleResetCamera} 
+            onClick={handleResetCamera}
             style={{ alignSelf: 'flex-start', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1rem' }}
           >
             正面に戻る
@@ -921,7 +970,7 @@ export default function Draw3D() {
             <Download size={18} /> 保存
           </button>
           <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Trash2 size={18} /> 
+            <Trash2 size={18} />
           </button>
         </div>
       )}
@@ -929,22 +978,34 @@ export default function Draw3D() {
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: 'max-content', maxWidth: 'calc(100vw - 650px)' }}>
-          
+
           {/* モード切替とツール */}
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button 
-              onClick={() => setIsDrawingMode(true)}
+            <button
+              onClick={() => {
+                setIsDrawingMode(true);
+                setShowPropertyPanel(false);
+                setShowResizePanel(false);
+                setShowAppearancePanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
               style={{ padding: '0.5rem 1rem', background: isDrawingMode ? 'var(--primary-glow)' : '#fff', color: isDrawingMode ? '#fff' : 'var(--text-main)', border: '1px solid var(--primary-glow)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="ツール"
             >
-              <PenTool size={18} /> 
+              <PenTool size={18} />
             </button>
-            <button 
-              onClick={() => setIsDrawingMode(false)}
+            <button
+              onClick={() => {
+                setIsDrawingMode(false);
+                setShowPropertyPanel(false);
+                setShowResizePanel(false);
+                setShowAppearancePanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
               style={{ padding: '0.5rem 1rem', background: !isDrawingMode ? '#334155' : '#fff', color: !isDrawingMode ? '#fff' : 'var(--text-main)', border: '1px solid #334155', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="視点移動"
             >
-              <Move3d size={18} /> 
+              <Move3d size={18} />
             </button>
 
             {isDrawingMode && (
@@ -963,23 +1024,82 @@ export default function Draw3D() {
             {!isDrawingMode && (
               <>
                 <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
-                <button 
-                  onClick={() => setShowVirtualCanvas(true)} 
-                  style={{ padding: '0.5rem 1rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <button
+                  onClick={() => {
+                    setShowVirtualCanvasMenu(prev => !prev);
+                    setShowPropertyPanel(false);
+                    setShowResizePanel(false);
+                    setShowAppearancePanel(false);
+                    setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+                  }}
+                  style={{ padding: '0.5rem 1rem', background: showVirtualCanvasMenu ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   title="仮想キャンバスを開く"
                 >
                   <Square size={18} />
                 </button>
-                <button 
-                  onClick={() => setShowPropertyPanel(prev => !prev)} 
+                <button
+                  onClick={() => {
+                    setShowPropertyPanel(prev => !prev);
+                    setShowResizePanel(false);
+                    setShowAppearancePanel(false);
+                    setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+                  }}
                   style={{ padding: '0.5rem 1rem', background: showPropertyPanel ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   title="詳細設定パネル"
                 >
                   <Settings size={18} />
                 </button>
+                <button
+                  onClick={() => {
+                    setShowResizePanel(prev => !prev);
+                    setShowPropertyPanel(false);
+                    setShowAppearancePanel(false);
+                    setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+                  }}
+                  style={{ padding: '0.5rem 1rem', background: showResizePanel ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="大きさを変更"
+                >
+                  <Maximize size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAppearancePanel(prev => !prev);
+                    setShowPropertyPanel(false);
+                    setShowResizePanel(false);
+                    setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+                  }}
+                  style={{ padding: '0.5rem 1rem', background: showAppearancePanel ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="見た目設定"
+                >
+                  <Palette size={18} />
+                </button>
+                <button
+                  onClick={() => setIsPlaying(prev => !prev)}
+                  style={{ padding: '0.5rem 1rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="再生"
+                >
+                  <Play size={18} />
+                </button>
               </>
             )}
           </div>
+
+          {showVirtualCanvasMenu && !isDrawingMode && (
+            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '8px' }}>
+              <button
+                onClick={() => { setVirtualCanvasShape('plane'); setShowVirtualCanvas(true); setShowVirtualCanvasMenu(false); }}
+                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Square size={16} /> 平面
+              </button>
+              <button
+                onClick={() => { setVirtualCanvasShape('cube'); setShowVirtualCanvas(true); setShowVirtualCanvasMenu(false); }}
+                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Shapes size={16} /> サイコロ
+              </button>
+            </div>
+          )}
 
           {isDrawingMode && tool === 'shape' && showSubMenu && (
             <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -1009,8 +1129,8 @@ export default function Draw3D() {
             <div style={{ display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>テキスト:</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
                   style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '150px' }}
@@ -1069,11 +1189,11 @@ export default function Draw3D() {
                 }}
               />
             ))}
-            <label 
+            <label
               title="詳細なカラー設定"
-              style={{ 
-                width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', 
-                border: !colors.includes(brushColor) ? '3px solid #334155' : '1px solid #ccc', 
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden',
+                border: !colors.includes(brushColor) ? '3px solid #334155' : '1px solid #ccc',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                 background: !colors.includes(brushColor) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
               }}
@@ -1133,22 +1253,22 @@ export default function Draw3D() {
       {/* 4. 奥行き設定 (左下) */}
       {showUI && isDrawingMode && (
         <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '200px' }}>
-           <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>描画の奥行き (Z: {distance})</label>
-           <input 
-             type="range" 
-             min="3" max="30" 
-             value={distance} 
-             onChange={(e) => setDistance(parseFloat(e.target.value))}
-             style={{ width: '100%' }}
-           />
+          <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>描画の奥行き (Z: {distance})</label>
+          <input
+            type="range"
+            min="3" max="30"
+            value={distance}
+            onChange={(e) => setDistance(parseFloat(e.target.value))}
+            style={{ width: '100%' }}
+          />
         </div>
       )}
 
       {/* 5. プロパティパネル (右側) */}
       {showUI && showPropertyPanel && (() => {
         const obj = selection.boxIndices.length > 0 ? boxes[selection.boxIndices[0]]
-                  : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
-                  : null;
+          : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
+            : null;
 
         const pos = obj?.position || [0, 0, 0];
         const rot = obj?.rotation || [0, 0, 0];
@@ -1157,94 +1277,239 @@ export default function Draw3D() {
         const rotXDeg = Math.round(rot[0] * 180 / Math.PI);
 
         return (
-        <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <span>詳細設定</span>
-          </div>
-          
-          {!obj ? (
-            <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
-              仮想キャンバスや図形を<br/>クリックして選択してください
+          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <span>詳細設定</span>
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>X座標</label>
-                  <input type="number" step="0.1" value={Number(pos[0]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 0)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Y座標</label>
-                  <input type="number" step="0.1" value={Number(pos[1]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 1)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Z座標</label>
-                  <input type="number" step="0.1" value={Number(pos[2]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 2)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
-                </div>
-              </div>
-              
-              <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>横の角度 (Y軸)</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <input type="number" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
-                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+            {!obj ? (
+              <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                仮想キャンバスや図形を<br />クリックして選択してください
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>X座標</label>
+                    <input type="number" step="0.1" value={Number(pos[0]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 0)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Y座標</label>
+                    <input type="number" step="0.1" value={Number(pos[1]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 1)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Z座標</label>
+                    <input type="number" step="0.1" value={Number(pos[2]).toFixed(1)} onChange={(e) => updateObjectProperty('position', parseFloat(e.target.value) || 0, 2)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }} />
                   </div>
                 </div>
-                <input type="range" min="-180" max="180" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '100%' }} />
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>縦の角度 (X軸)</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <input type="number" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
-                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
-                  </div>
-                </div>
-                <input type="range" min="-180" max="180" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '100%' }} />
-              </div>
-            </>
-          )}
 
-          <button 
-            onClick={() => {
-              setShowPropertyPanel(false);
-              setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
-            }} 
-            style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
-          >
-            設定終了
-          </button>
-        </div>
+                <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>横の角度 (Y軸)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+                    </div>
+                  </div>
+                  <input type="range" min="-180" max="180" value={rotYDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 1)} style={{ width: '100%' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>縦の角度 (X軸)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+                    </div>
+                  </div>
+                  <input type="range" min="-180" max="180" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '100%' }} />
+                </div>
+              </>
+            )}
+
+            <button
+              onClick={() => {
+                setShowPropertyPanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
+              style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+            >
+              設定終了
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* 6. リサイズパネル (右側、プロパティパネルの下) */}
+      {showUI && showResizePanel && (() => {
+        const obj = selection.boxIndices.length > 0 ? boxes[selection.boxIndices[0]]
+          : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
+            : null;
+
+        const scaleVal = obj?.scale;
+        const isArray = Array.isArray(scaleVal);
+        const scaleAll = isArray ? scaleVal[0] : (scaleVal || 1);
+        const scaleX = isArray ? scaleVal[0] : (scaleVal || 1);
+        const scaleY = isArray ? scaleVal[1] : (scaleVal || 1);
+        const scaleZ = isArray ? scaleVal[2] : (scaleVal || 1);
+
+        return (
+          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <span>大きさ変更</span>
+            </div>
+
+            {!obj ? (
+              <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                仮想キャンバスや図形を<br />クリックして選択してください
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>全体スケール</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" step="0.1" value={Number(scaleAll).toFixed(1)} onChange={(e) => updateObjectProperty('scaleAllProportional', parseFloat(e.target.value))} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>x</span>
+                    </div>
+                  </div>
+                  <input type="range" min="0.1" max="5" step="0.1" value={scaleAll} onChange={(e) => updateObjectProperty('scaleAllProportional', parseFloat(e.target.value))} style={{ width: '100%' }} />
+                </div>
+
+                <div style={{ width: '100%', height: '1px', background: '#e2e8f0' }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>横幅 (X)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" step="0.1" value={Number(scaleX).toFixed(1)} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 0)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>x</span>
+                    </div>
+                  </div>
+                  <input type="range" min="0.1" max="5" step="0.1" value={scaleX} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 0)} style={{ width: '100%' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>高さ (Y)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" step="0.1" value={Number(scaleY).toFixed(1)} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 1)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>x</span>
+                    </div>
+                  </div>
+                  <input type="range" min="0.1" max="5" step="0.1" value={scaleY} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 1)} style={{ width: '100%' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>奥行き (Z)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" step="0.1" value={Number(scaleZ).toFixed(1)} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 2)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>x</span>
+                    </div>
+                  </div>
+                  <input type="range" min="0.1" max="5" step="0.1" value={scaleZ} onChange={(e) => updateObjectProperty('scale', parseFloat(e.target.value), 2)} style={{ width: '100%' }} />
+                </div>
+
+                {['cylinder', 'prism3', 'prism4'].includes(obj.shapeType) && (
+                  <>
+                    <div style={{ width: '100%', height: '1px', background: '#e2e8f0' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>上部の絞り (テーパー)</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input type="number" step="0.1" value={Number(obj.taper ?? 1).toFixed(1)} onChange={(e) => updateObjectProperty('taper', parseFloat(e.target.value))} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                        </div>
+                      </div>
+                      <input type="range" min="0" max="2" step="0.1" value={obj.taper ?? 1} onChange={(e) => updateObjectProperty('taper', parseFloat(e.target.value))} style={{ width: '100%' }} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowResizePanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
+              style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+            >
+              完了
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* 7. 見た目設定パネル (右側、プロパティパネルの下) */}
+      {showUI && showAppearancePanel && (() => {
+        const obj = selection.boxIndices.length > 0 ? boxes[selection.boxIndices[0]]
+          : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
+            : null;
+
+        return (
+          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <span>見た目設定</span>
+            </div>
+
+            {!obj ? (
+              <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                仮想キャンバスや図形を<br />クリックして選択してください
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>透明度</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" step="0.1" min="0" max="1" value={Number(obj.opacity ?? 1.0).toFixed(1)} onChange={(e) => updateObjectProperty('opacity', parseFloat(e.target.value))} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                    </div>
+                  </div>
+                  <input type="range" min="0" max="1" step="0.1" value={obj.opacity ?? 1.0} onChange={(e) => updateObjectProperty('opacity', parseFloat(e.target.value))} style={{ width: '100%' }} />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowAppearancePanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
+              style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+            >
+              完了
+            </button>
+          </div>
         );
       })()}
 
       {showUI && (
         <div style={{ position: 'absolute', bottom: '20px', left: '0', width: '100%', textAlign: 'center', color: 'var(--text-main)', pointerEvents: 'none', fontWeight: 'bold', fontSize: '1.2rem', textShadow: '0 2px 4px rgba(255,255,255,0.8)', zIndex: 10 }}>
-          {!isDrawingMode 
-            ? 'ドラッグしてカメラを回転・移動できます' 
-            : tool === 'pen' ? 'ドラッグして空間に絵を描けます' 
-            : tool === 'box' ? 'ドラッグして3Dボックスを配置できます' 
-            : tool === 'paint' ? 'ドラッグして触れた絵の色を変更できます'
-            : tool === 'eyedropper' ? '描いたものをクリックして色を採取します'
-            : tool === 'eraser' ? 'ドラッグして触れたものを消去します'
-            : tool === 'lasso' ? 'ドラッグして囲んだものを選択します'
-            : tool === 'move' ? 'ドラッグして選択中のものを移動できます'
-            : tool === 'text' ? 'クリックした場所にテキストを配置します'
-            : tool === 'fill' ? '描いた線の内側をクリックして塗りつぶします（ひと筆書き用）'
-            : 'クリックしてコピーした絵をスタンプできます'}
+          {!isDrawingMode
+            ? 'ドラッグしてカメラを回転・移動できます'
+            : tool === 'pen' ? 'ドラッグして空間に絵を描けます'
+              : tool === 'box' ? 'ドラッグして3Dボックスを配置できます'
+                : tool === 'paint' ? 'ドラッグして触れた絵の色を変更できます'
+                  : tool === 'eyedropper' ? '描いたものをクリックして色を採取します'
+                    : tool === 'eraser' ? 'ドラッグして触れたものを消去します'
+                      : tool === 'lasso' ? 'ドラッグして囲んだものを選択します'
+                        : tool === 'move' ? 'ドラッグして選択中のものを移動できます'
+                          : tool === 'text' ? 'クリックした場所にテキストを配置します'
+                            : tool === 'fill' ? '描いた線の内側をクリックして塗りつぶします（ひと筆書き用）'
+                              : 'クリックしてコピーした絵をスタンプできます'}
         </div>
       )}
 
       <Canvas onCreated={({ camera }) => { cameraRef.current = camera; }} camera={{ position: [0, 5, 20], fov: 50 }}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 10, 5]} intensity={1} />
-        
-        <DrawingController 
-          isActive={isDrawingMode} 
+        <Suspense fallback={null}>
+          <ambientLight intensity={0.6} />
+          <directionalLight position={[10, 10, 5]} intensity={1} />
+
+        <DrawingController
+          isActive={isDrawingMode}
           distance={distance}
           onPointerDown3D={onPointerDown3D}
           onPointerMove3D={onPointerMove3D}
@@ -1255,16 +1520,16 @@ export default function Draw3D() {
           {/* Strokes */}
           {strokes.map((stroke, index) => {
             const isSelected = selection?.strokeIndices.includes(index);
-            
+
             let fillPositions = null;
             if (stroke.fillColor && stroke.points.length > 2) {
-              const centroid = [0,0,0];
-              stroke.points.forEach(p => { centroid[0]+=p[0]; centroid[1]+=p[1]; centroid[2]+=p[2]; });
-              centroid[0]/=stroke.points.length; centroid[1]/=stroke.points.length; centroid[2]/=stroke.points.length;
-              
+              const centroid = [0, 0, 0];
+              stroke.points.forEach(p => { centroid[0] += p[0]; centroid[1] += p[1]; centroid[2] += p[2]; });
+              centroid[0] /= stroke.points.length; centroid[1] /= stroke.points.length; centroid[2] /= stroke.points.length;
+
               const posArray = [];
-              for(let i=0; i<stroke.points.length - 1; i++) {
-                posArray.push(...centroid, ...stroke.points[i], ...stroke.points[i+1]);
+              for (let i = 0; i < stroke.points.length - 1; i++) {
+                posArray.push(...centroid, ...stroke.points[i], ...stroke.points[i + 1]);
               }
               posArray.push(...centroid, ...stroke.points[stroke.points.length - 1], ...stroke.points[0]);
               fillPositions = new Float32Array(posArray);
@@ -1311,15 +1576,18 @@ export default function Draw3D() {
             if (type === 'virtualCanvas') {
               return <VirtualCanvasMesh key={`b-${index}`} data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />;
             }
+            if (type === 'virtualCanvasCube') {
+              return <VirtualCanvasCubeMesh key={`b-${index}`} data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />;
+            }
             return (
-              <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0,0,0]} scale={b.scale || 1} onClick={(e) => handleObjectClick(e, 'box', index)}>
+              <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0, 0, 0]} scale={b.scale || 1} onClick={(e) => handleObjectClick(e, 'box', index)}>
                 {type === 'box' && <boxGeometry args={b.size} />}
-                {type === 'sphere' && <sphereGeometry args={[b.size[0]/2, 32, 32]} />}
-                {type === 'cone' && <coneGeometry args={[b.size[0]/2, b.size[0], 32]} />}
-                {type === 'cylinder' && <cylinderGeometry args={[b.size[0]/2, b.size[0]/2, b.size[0], 32]} />}
-                {type === 'prism3' && <cylinderGeometry args={[b.size[0]/2, b.size[0]/2, b.size[0], 3]} />}
-                {type === 'prism4' && <cylinderGeometry args={[b.size[0]/2, b.size[0]/2, b.size[0], 4]} />}
-                <meshStandardMaterial color={b.color} transparent opacity={0.9} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
+                {type === 'sphere' && <sphereGeometry args={[b.size[0] / 2, 32, 32]} />}
+                {type === 'cone' && <coneGeometry args={[b.size[0] / 2, b.size[0], 32]} />}
+                {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
+                {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
+                {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
+                <meshStandardMaterial color={b.color} transparent opacity={b.opacity ?? 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
               </mesh>
             );
           })}
@@ -1330,11 +1598,11 @@ export default function Draw3D() {
             return (
               <mesh position={currentBox.startPos}>
                 {type === 'box' && <boxGeometry args={[sizeVal, sizeVal, sizeVal]} />}
-                {type === 'sphere' && <sphereGeometry args={[sizeVal/2, 32, 32]} />}
-                {type === 'cone' && <coneGeometry args={[sizeVal/2, sizeVal, 32]} />}
-                {type === 'cylinder' && <cylinderGeometry args={[sizeVal/2, sizeVal/2, sizeVal, 32]} />}
-                {type === 'prism3' && <cylinderGeometry args={[sizeVal/2, sizeVal/2, sizeVal, 3]} />}
-                {type === 'prism4' && <cylinderGeometry args={[sizeVal/2, sizeVal/2, sizeVal, 4]} />}
+                {type === 'sphere' && <sphereGeometry args={[sizeVal / 2, 32, 32]} />}
+                {type === 'cone' && <coneGeometry args={[sizeVal / 2, sizeVal, 32]} />}
+                {type === 'cylinder' && <cylinderGeometry args={[sizeVal / 2, sizeVal / 2, sizeVal, 32]} />}
+                {type === 'prism3' && <cylinderGeometry args={[sizeVal / 2, sizeVal / 2, sizeVal, 3]} />}
+                {type === 'prism4' && <cylinderGeometry args={[sizeVal / 2, sizeVal / 2, sizeVal, 4]} />}
                 <meshStandardMaterial color={currentBox.color} transparent opacity={0.5} roughness={0.3} metalness={0.2} />
               </mesh>
             );
@@ -1344,14 +1612,14 @@ export default function Draw3D() {
           {texts.map((t, index) => {
             const isSelected = selection?.textIndices.includes(index);
             return (
-              <Text 
-                key={`t-${index}`} 
-                position={t.position} 
-                rotation={t.rotation || [0,0,0]}
+              <Text
+                key={`t-${index}`}
+                position={t.position}
+                rotation={t.rotation || [0, 0, 0]}
                 scale={t.scale || 1}
-                color={isSelected ? '#ffffff' : t.color} 
-                fontSize={t.size} 
-                anchorX="center" 
+                color={isSelected ? '#ffffff' : t.color}
+                fontSize={t.size}
+                anchorX="center"
                 anchorY="middle"
                 onClick={(e) => handleObjectClick(e, 'text', index)}
               >
@@ -1380,57 +1648,83 @@ export default function Draw3D() {
             const dz = previewPos[2] - copiedArt.centroid[2];
             return (
               <group position={[dx, dy, dz]}>
-                 {copiedArt.strokes.map((stroke, i) => (
-                    <Line key={`prev-s-${i}`} points={stroke.points} color={stroke.color} lineWidth={(stroke.lineWidth || 5) / 100} worldUnits={true} transparent opacity={0.4} />
-                 ))}
-                 {copiedArt.boxes.map((b, i) => (
-                    <mesh key={`prev-b-${i}`} position={b.position}>
-                       <boxGeometry args={b.size} />
-                       <meshStandardMaterial color={b.color} transparent opacity={0.4} roughness={0.3} metalness={0.2} />
-                    </mesh>
-                 ))}
-                 {copiedArt.texts.map((t, i) => (
-                    <Text 
-                      key={`prev-t-${i}`} 
-                      position={t.position} 
-                      color={t.color} 
-                      fontSize={t.size} 
-                      anchorX="center" 
-                      anchorY="middle"
-                      fillOpacity={0.4}
-                    >
-                      {t.text}
-                    </Text>
-                 ))}
+                {copiedArt.strokes.map((stroke, i) => (
+                  <Line key={`prev-s-${i}`} points={stroke.points} color={stroke.color} lineWidth={(stroke.lineWidth || 5) / 100} worldUnits={true} transparent opacity={0.4} />
+                ))}
+                {copiedArt.boxes.map((b, i) => (
+                  <mesh key={`prev-b-${i}`} position={b.position}>
+                    <boxGeometry args={b.size} />
+                    <meshStandardMaterial color={b.color} transparent opacity={0.4} roughness={0.3} metalness={0.2} />
+                  </mesh>
+                ))}
+                {copiedArt.texts.map((t, i) => (
+                  <Text
+                    key={`prev-t-${i}`}
+                    position={t.position}
+                    color={t.color}
+                    fontSize={t.size}
+                    anchorX="center"
+                    anchorY="middle"
+                    fillOpacity={0.4}
+                  >
+                    {t.text}
+                  </Text>
+                ))}
               </group>
             );
           })()}
         </group>
 
         {/* 空間のガイドとなるグリッド */}
-        <Grid 
-          position={[0, -5, 0]} 
-          args={[100, 100]} 
-          cellSize={1} 
-          cellThickness={1} 
-          cellColor="#e2e8f0" 
-          sectionSize={5} 
-          sectionThickness={1.5} 
-          sectionColor="#cbd5e1" 
-          fadeDistance={50} 
+        <Grid
+          position={[0, -5, 0]}
+          args={[100, 100]}
+          cellSize={1}
+          cellThickness={1}
+          cellColor="#e2e8f0"
+          sectionSize={5}
+          sectionThickness={1.5}
+          sectionColor="#cbd5e1"
+          fadeDistance={50}
         />
-        
+
         <Environment preset="city" />
-        <OrbitControls 
+        </Suspense>
+        <OrbitControls
           ref={controlsRef}
-          enabled={!isDrawingMode} 
-          enableDamping 
+          enabled={!isDrawingMode}
+          enableDamping
           dampingFactor={0.05}
         />
       </Canvas>
       {showVirtualCanvas && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, background: '#fafafa' }}>
-          <Draw2D isVirtualCanvas={true} onVirtualCanvasComplete={handleVirtualCanvasComplete} onVirtualCanvasCancel={() => setShowVirtualCanvas(false)} />
+          <Draw2D isVirtualCanvas={true} virtualCanvasShape={virtualCanvasShape} onVirtualCanvasComplete={handleVirtualCanvasComplete} onVirtualCanvasCancel={() => setShowVirtualCanvas(false)} />
+        </div>
+      )}
+
+      {showConfirmHome && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => navigate('/')}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowConfirmHome(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
