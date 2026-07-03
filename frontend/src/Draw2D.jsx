@@ -52,11 +52,15 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     if (!canvas) return;
     const dataUrl = canvas.toDataURL();
     setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
+      let newHistory = prev.slice(0, historyIndex + 1);
+      if (newHistory[newHistory.length - 1] === dataUrl) return newHistory;
       newHistory.push(dataUrl);
+      if (newHistory.length > 19) {
+        newHistory = newHistory.slice(newHistory.length - 19);
+      }
+      setHistoryIndex(newHistory.length - 1);
       return newHistory;
     });
-    setHistoryIndex(prev => prev + 1);
   }, [historyIndex]);
 
   useEffect(() => {

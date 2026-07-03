@@ -309,3 +309,12 @@ canvas {
   100% { left: calc(100% - 30px); opacity: 0; }
 }
 
+
+.start-button.inverted {
+  background: var(--primary-glow);
+  color: #ffffff;
+}
+.start-button.inverted:hover {
+  background: #ffffff;
+  color: var(--primary-glow);
+}
