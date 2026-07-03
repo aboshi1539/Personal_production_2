@@ -3,7 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, X, Settings, Maximize, Palette, Play, Pause } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, Video, X, Settings, Maximize, Palette, Play, Pause } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
@@ -61,7 +61,7 @@ function pointInPolygon(point, vs) {
   return inside;
 }
 
-function DrawingController({ isActive, distance, onPointerDown3D, onPointerMove3D, onPointerUp3D }) {
+function DrawingController({ isActive, tool, distance, setDistance, onPointerDown3D, onPointerMove3D, onPointerUp3D }) {
   const { camera, gl } = useThree();
   const isDragging = useRef(false);
 
@@ -101,17 +101,30 @@ function DrawingController({ isActive, distance, onPointerDown3D, onPointerMove3
       onPointerUp3D([pos3D.x, pos3D.y, pos3D.z], posNDC);
     };
 
+    const handleWheel = (e) => {
+      if (!isActive || !setDistance) return;
+      const alwaysActiveTools = ['text', 'eraser', 'move', 'lasso', 'stamp'];
+      const shouldChangeDepth = alwaysActiveTools.includes(tool) || isDragging.current;
+      if (!shouldChangeDepth) return;
+      
+      e.preventDefault();
+      const delta = e.deltaY * -0.01;
+      setDistance(prev => Math.max(3, Math.min(60, prev + delta)));
+    };
+
     const canvas = gl.domElement;
     canvas.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       canvas.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      canvas.removeEventListener('wheel', handleWheel);
     };
-  }, [isActive, camera, gl, distance, onPointerDown3D, onPointerMove3D, onPointerUp3D]);
+  }, [isActive, tool, camera, gl, distance, setDistance, onPointerDown3D, onPointerMove3D, onPointerUp3D]);
 
   return null;
 }
@@ -244,7 +257,7 @@ export default function Draw3D() {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [tool, setTool] = useState('pen'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
 
-  const [brushColor, setBrushColor] = useState('#ef4444');
+  const [brushColor, setBrushColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(3);
   const [eraserSize, setEraserSize] = useState(3);
   const [distance, setDistance] = useState(15);
@@ -314,14 +327,15 @@ export default function Draw3D() {
   const [previewPos, setPreviewPos] = useState(null);
   const [savedColors, setSavedColors] = useState([]);
 
+
   const modifiedSomethingRef = useRef(false);
   const moveStartRef = useRef(null);
   const moveInitialStateRef = useRef(null);
   const cameraRef = useRef();
 
-  const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#a855f7', '#f97316', '#8b4513', '#38bdf8', '#166534', '#333333', '#9ca3af', '#ffffff'];
+  const baseColors = ['#000000', '#ffffff', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#a855f7'];
   const eraserRadiusMap = { 1: 0.5, 2: 1.0, 3: 1.5, 4: 2.5, 5: 4.0 };
-  const brushSizeMap = { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 };
+  const brushSizeMap = { 1: 2, 2: 10, 3: 30, 4: 60, 5: 120 };
 
   const handleCopy = () => {
     let strokesToCopy;
@@ -365,6 +379,21 @@ export default function Draw3D() {
     setTool('stamp');
     setIsDrawingMode(true);
     setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+  };
+
+  const handleDeleteSelection = () => {
+    if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
+
+    const nextStrokes = strokesRef.current.filter((_, i) => !selection.strokeIndices.includes(i));
+    const nextBoxes = boxesRef.current.filter((_, i) => !selection.boxIndices.includes(i));
+    const nextTexts = textsRef.current.filter((_, i) => !selection.textIndices.includes(i));
+
+    setStrokes(nextStrokes);
+    setBoxes(nextBoxes);
+    setTexts(nextTexts);
+    setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+    setTool('lasso');
+    setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
   };
 
   const handleScale = (factor) => {
@@ -571,7 +600,7 @@ export default function Draw3D() {
     if (!copiedArt) return;
     const dx = pos[0] - copiedArt.centroid[0];
     const dy = pos[1] - copiedArt.centroid[1];
-    const dz = pos[2] - copiedArt.centroid[2];
+    const dz = 0; // Maintain original depth
 
     const newStrokes = copiedArt.strokes.map(s => ({
       ...s,
@@ -631,7 +660,12 @@ export default function Draw3D() {
 
       if (foundColor) {
         setBrushColor(foundColor);
-        setSavedColors(prev => prev.includes(foundColor) ? prev : [...prev, foundColor]);
+        setSavedColors(prev => {
+          if (prev.includes(foundColor)) return prev;
+          const newSaved = [...prev, foundColor];
+          if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+          return newSaved;
+        });
         setTool('pen');
       }
       return;
@@ -688,7 +722,7 @@ export default function Draw3D() {
       moveStartRef.current = pos3D;
       moveInitialStateRef.current = { strokes: JSON.parse(JSON.stringify(strokesRef.current)), boxes: JSON.parse(JSON.stringify(boxesRef.current)), texts: JSON.parse(JSON.stringify(textsRef.current)) };
     }
-  }, [tool, brushColor, handleStamp, shapeType, textInput, textSize]);
+  }, [tool, brushColor, brushSize, handleStamp, shapeType, textInput, textSize]);
 
   const onPointerMove3D = useCallback((pos3D, isDragging, posNDC) => {
     setPreviewPos(pos3D);
@@ -804,7 +838,7 @@ export default function Draw3D() {
         setTexts(nextTexts);
       }
     }
-  }, [tool, selection, brushColor]);
+  }, [tool, selection, brushColor, eraserSize]);
 
   const onPointerUp3D = useCallback(() => {
     if (tool === 'pen') {
@@ -941,102 +975,95 @@ export default function Draw3D() {
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {showUI && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              className="start-button"
-              onClick={undo}
-              disabled={historyIndex === 0}
-              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
-            >
-              <Undo2 size={20} />
-            </button>
-            <button
-              className="start-button"
-              onClick={redo}
-              disabled={historyIndex >= history.length - 1}
-              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-            >
-              <Redo2 size={20} />
-            </button>
-          </div>
+        {showUI ? (
+          <>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <button className="start-button" onClick={() => {
+                const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
+                if (historyIndex > lastSavedIndex && !isEmpty) {
+                  setShowConfirmHome(true);
+                } else {
+                  navigate('/');
+                }
+              }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <HomeIcon size={20} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="start-button"
+                onClick={undo}
+                disabled={historyIndex === 0}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <Undo2 size={20} />
+              </button>
+              <button
+                className="start-button"
+                onClick={redo}
+                disabled={historyIndex >= history.length - 1}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+              >
+                <Redo2 size={20} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <button
+                className="start-button"
+                onClick={handleZoomIn}
+                title="ズームイン"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomIn size={20} />
+              </button>
+              <button
+                className="start-button"
+                onClick={handleZoomOut}
+                title="ズームアウト"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomOut size={20} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ height: 'calc(176px + 2.5rem)', width: '44px' }} />
         )}
-        {showUI && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              className="start-button"
-              onClick={handleZoomIn}
-              title="ズームイン"
-              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <ZoomIn size={20} />
-            </button>
-            <button
-              className="start-button"
-              onClick={handleZoomOut}
-              title="ズームアウト"
-              style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <ZoomOut size={20} />
-            </button>
-          </div>
-        )}
-        {showUI && (
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
           <button
             className="start-button"
-            onClick={handleResetCamera}
-            style={{ alignSelf: 'flex-start', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
+            onClick={() => setShowUI(!showUI)}
+            title={showUI ? "メニューを非表示" : "メニューを表示"}
+            style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            正面に戻る
+            {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
-        )}
+        </div>
       </div>
 
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Upload size={18} /> 読み込み
+          <label title="読み込み" style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Upload size={20} />
             <input type="file" accept=".json" onChange={handleLoadData} style={{ display: 'none' }} />
           </label>
-          <button onClick={handleSaveData} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Download size={18} /> 保存
-          </button>
-          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Trash2 size={18} />
+          <button title="保存" onClick={handleSaveData} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Download size={20} />
           </button>
         </div>
       )}
 
-      {/* 画面右下 (ホームと非表示ボタン) */}
-      <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <button
-          className="start-button"
-          onClick={() => setShowUI(!showUI)}
-          title={showUI ? "メニューを非表示" : "メニューを表示"}
-          style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
-        {showUI && (
-          <button className="start-button" onClick={() => {
-            const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
-            if (historyIndex > lastSavedIndex && !isEmpty) {
-              setShowConfirmHome(true);
-            } else {
-              navigate('/');
-            }
-          }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <HomeIcon size={20} />
-          </button>
-        )}
-      </div>
+
 
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', left: '130px', right: '290px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', pointerEvents: 'none' }}>
 
           {/* モード切替とツール */}
-          <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+            
+
             <button
               onClick={() => {
                 setIsDrawingMode(true);
@@ -1067,15 +1094,39 @@ export default function Draw3D() {
             {isDrawingMode && (
               <>
                 <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
-                <button onClick={() => handleToolChange('pen')} title="ペン" style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
-                <button onClick={() => handleToolChange('eraser')} title="消しゴム" style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
-                <button onClick={() => handleToolChange('lasso')} title="選択・移動" style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
-                <button onClick={() => handleToolChange('eyedropper')} title="スポイト" style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
-                <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} title="テキスト" style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
-                <button onClick={() => handleToolChange('fill')} title="塗りつぶし" style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PaintBucket size={18} /></button>
-                <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} title="図形" style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
-                <button onClick={() => handleToolChange('paint')} title="ブラシ" style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
-                <button onClick={() => handleToolChange('camera')} title="視点移動" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={18} /></button>
+                
+                {/* 描画カテゴリ */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>描画</span>
+                  <div style={{ display: 'flex', gap: '0.2rem' }}>
+                    <button onClick={() => handleToolChange('pen')} title="ペン" style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><PenTool size={18} /></button>
+                    <button onClick={() => handleToolChange('eraser')} title="消しゴム" style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Eraser size={18} /></button>
+                    <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} title="テキスト" style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Type size={18} /></button>
+                    <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} title="図形" style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Shapes size={18} /></button>
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
+
+                {/* 編集カテゴリ */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>編集</span>
+                  <div style={{ display: 'flex', gap: '0.2rem' }}>
+                    <button onClick={() => handleToolChange('lasso')} title="選択・移動" style={{ padding: '0.5rem 1rem', background: (tool === 'lasso' || tool === 'move') ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><MousePointer2 size={18} /></button>
+                    <button onClick={() => handleToolChange('eyedropper')} title="スポイト" style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Pipette size={18} /></button>
+                    <button onClick={() => handleToolChange('paint')} title="ブラシ" style={{ padding: '0.5rem 1rem', background: tool === 'paint' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Paintbrush size={18} /></button>
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
+
+                {/* その他（視点移動） */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>視点</span>
+                  <div style={{ display: 'flex', gap: '0.2rem' }}>
+                    <button onClick={() => handleToolChange('camera')} title="視点移動" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={18} /></button>
+                  </div>
+                </div>
               </>
             )}
             {!isDrawingMode && (
@@ -1142,7 +1193,7 @@ export default function Draw3D() {
           </div>
 
           {showVirtualCanvasMenu && !isDrawingMode && (
-            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '8px' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '8px' }}>
               <button
                 onClick={() => { setVirtualCanvasShape('plane'); setShowVirtualCanvas(true); setShowVirtualCanvasMenu(false); }}
                 style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -1159,7 +1210,7 @@ export default function Draw3D() {
           )}
 
           {isDrawingMode && tool === 'shape' && showSubMenu && (
-            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
               {[
                 { id: 'box', icon: <Square size={16} />, label: '四角' },
                 { id: 'sphere', icon: <Circle size={16} />, label: '丸' },
@@ -1183,7 +1234,7 @@ export default function Draw3D() {
           )}
 
           {isDrawingMode && tool === 'text' && showSubMenu && (
-            <div style={{ display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>テキスト:</label>
                 <input
@@ -1212,20 +1263,39 @@ export default function Draw3D() {
           )}
 
           {isDrawingMode && tool === 'move' && (selection.strokeIndices.length > 0 || selection.boxIndices.length > 0 || selection.textIndices.length > 0) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
               <span style={{ fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>選択中ツール</span>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button onClick={handleCopy} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><Copy size={14} /> コピー</button>
-                <button onClick={() => handleScale(1.1)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><ZoomIn size={14} /> 拡大</button>
-                <button onClick={() => handleScale(0.9)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><ZoomOut size={14} /> 縮小</button>
-                <button onClick={() => handleRotate('y', 15)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><RotateCw size={14} /> 右回転(Y)</button>
-                <button onClick={() => handleRotate('y', -15)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><RotateCcw size={14} /> 左回転(Y)</button>
-                <button onClick={() => handleRotate('x', 15)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><RotateCw size={14} /> 縦回転(X)</button>
-                <button onClick={() => handleRotate('z', 15)} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><RotateCw size={14} /> 傾き(Z)</button>
                 <button onClick={() => handleFlip('x')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={14} /> 左右反転</button>
                 <button onClick={() => handleFlip('y')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipVertical size={14} /> 上下反転</button>
                 <button onClick={() => handleFlip('z')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={14} style={{ transform: 'rotate(-45deg)' }} /> 前後反転</button>
+                <button onClick={handleDeleteSelection} style={{ padding: '0.3rem 0.5rem', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}><Trash2 size={14} /> 削除</button>
                 <button onClick={() => { setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] }); setTool('lasso'); }} style={{ padding: '0.3rem 0.5rem', background: '#fef2f2', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}><X size={14} /> 選択解除</button>
+              </div>
+            </div>
+          )}
+
+          {isDrawingMode && (tool === 'pen' || tool === 'eraser' || tool === 'paint') && (
+            <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                {tool === 'eraser' ? '消しゴムサイズ:' : tool === 'paint' ? 'ブラシの太さ:' : 'ペンの太さ:'}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {[1, 2, 3, 4, 5].map(s => {
+                  const isActive = (tool === 'eraser' || tool === 'paint') ? eraserSize === s : brushSize === s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => (tool === 'eraser' || tool === 'paint') ? setEraserSize(s) : setBrushSize(s)}
+                      style={{
+                        width: '36px', height: '36px', borderRadius: '8px', background: isActive ? '#e2e8f0' : '#fff', border: isActive ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
+                      }}
+                    >
+                      <div style={{ width: `${s * 4}px`, height: `${s * 4}px`, borderRadius: '50%', background: '#334155' }} />
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1237,7 +1307,7 @@ export default function Draw3D() {
         <div style={{ position: 'absolute', top: '130px', right: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem' }}>カラー</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            {colors.map(c => (
+            {baseColors.map(c => (
               <button
                 key={c}
                 onClick={() => setBrushColor(c)}
@@ -1246,70 +1316,67 @@ export default function Draw3D() {
                 }}
               />
             ))}
+            {[0, 1, 2, 3, 4].map(i => {
+              const c = savedColors[i];
+              return c ? (
+                <button
+                  key={`saved-${i}`}
+                  onClick={() => setBrushColor(c)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
+                  }}
+                />
+              ) : (
+                <div
+                  key={`empty-${i}`}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: 'transparent', border: '1px dashed #cbd5e1'
+                  }}
+                />
+              );
+            })}
             <label
               title="詳細なカラー設定"
               style={{
                 width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden',
-                border: !colors.includes(brushColor) ? '3px solid #334155' : '1px solid #ccc',
+                border: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? '3px solid #334155' : '1px solid #ccc',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                background: !colors.includes(brushColor) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
+                background: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
               }}
             >
               <input
                 type="color"
                 value={brushColor}
                 onChange={(e) => setBrushColor(e.target.value)}
+                onBlur={(e) => {
+                  const val = e.target.value;
+                  setSavedColors(prev => {
+                    if (prev.includes(val)) return prev;
+                    const newSaved = [...prev, val];
+                    if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+                    return newSaved;
+                  });
+                }}
                 style={{ opacity: 0, position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer' }}
               />
             </label>
           </div>
 
-          {savedColors.length > 0 && (
-            <>
-              <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.5rem 0' }} />
-              <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem', alignSelf: 'flex-start' }}>履歴</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                {savedColors.map(c => (
-                  <button
-                    key={`saved-${c}`}
-                    onClick={() => setBrushColor(c)}
-                    style={{
-                      width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
-                    }}
-                  />
-                ))}
-              </div>
-            </>
-          )}
         </div>
       )}
 
-      {/* 3. ブラシ/消しゴムサイズ (左側縦並び) */}
-      {showUI && isDrawingMode && (tool === 'pen' || tool === 'eraser' || tool === 'paint') && (
-        <div style={{ position: 'absolute', top: '180px', left: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '0.8rem', textAlign: 'center', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
-            {tool === 'eraser' ? '消しゴム\nサイズ' : tool === 'paint' ? 'ブラシの\n太さ' : 'ペンの\n太さ'}
-          </div>
-          {[1, 2, 3, 4, 5].map(s => {
-            const isActive = (tool === 'eraser' || tool === 'paint') ? eraserSize === s : brushSize === s;
-            return (
-              <button
-                key={s}
-                onClick={() => (tool === 'eraser' || tool === 'paint') ? setEraserSize(s) : setBrushSize(s)}
-                style={{
-                  width: '40px', height: '40px', borderRadius: '8px', background: isActive ? '#e2e8f0' : '#fff', border: isActive ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
-                }}
-              >
-                <div style={{ width: `${s * 4}px`, height: `${s * 4}px`, borderRadius: '50%', background: '#334155' }} />
-              </button>
-            )
-          })}
-        </div>
-      )}
+
 
       {/* 4. 奥行き設定 (左下) */}
       {showUI && isDrawingMode && (
         <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '200px' }}>
+          <button
+            onClick={handleResetCamera}
+            style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.9rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            <Video size={18} /> 正面に戻る
+          </button>
+          <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
           <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>描画の奥行き (Z: {distance})</label>
           <input
             type="range"
@@ -1567,7 +1634,9 @@ export default function Draw3D() {
 
         <DrawingController
           isActive={isDrawingMode && tool !== 'camera'}
+          tool={tool}
           distance={distance}
+          setDistance={setDistance}
           onPointerDown3D={onPointerDown3D}
           onPointerMove3D={onPointerMove3D}
           onPointerUp3D={onPointerUp3D}
@@ -1702,22 +1771,33 @@ export default function Draw3D() {
           {tool === 'stamp' && isDrawingMode && copiedArt && previewPos && (() => {
             const dx = previewPos[0] - copiedArt.centroid[0];
             const dy = previewPos[1] - copiedArt.centroid[1];
-            const dz = previewPos[2] - copiedArt.centroid[2];
+            const dz = 0; // Maintain original depth
             return (
               <group position={[dx, dy, dz]}>
                 {copiedArt.strokes.map((stroke, i) => (
                   <Line key={`prev-s-${i}`} points={stroke.points} color={stroke.color} lineWidth={(stroke.lineWidth || 5) / 100} worldUnits={true} transparent opacity={0.4} />
                 ))}
-                {copiedArt.boxes.map((b, i) => (
-                  <mesh key={`prev-b-${i}`} position={b.position}>
-                    <boxGeometry args={b.size} />
-                    <meshStandardMaterial color={b.color} transparent opacity={0.4} roughness={0.3} metalness={0.2} />
-                  </mesh>
-                ))}
+                {copiedArt.boxes.map((b, i) => {
+                  const type = b.shapeType || 'box';
+                  if (type === 'virtualCanvas' || type === 'virtualCanvasCube') return null;
+                  return (
+                    <mesh key={`prev-b-${i}`} position={b.position} rotation={b.rotation || [0, 0, 0]} scale={b.scale || 1}>
+                      {type === 'box' && <boxGeometry args={b.size} />}
+                      {type === 'sphere' && <sphereGeometry args={[b.size[0] / 2, 32, 32]} />}
+                      {type === 'cone' && <coneGeometry args={[b.size[0] / 2, b.size[0], 32]} />}
+                      {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
+                      {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
+                      {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
+                      <meshStandardMaterial color={b.color} transparent opacity={0.4} roughness={0.3} metalness={0.2} />
+                    </mesh>
+                  );
+                })}
                 {copiedArt.texts.map((t, i) => (
                   <Text
                     key={`prev-t-${i}`}
                     position={t.position}
+                    rotation={t.rotation || [0, 0, 0]}
+                    scale={t.scale || 1}
                     color={t.color}
                     fontSize={t.size}
                     anchorX="center"

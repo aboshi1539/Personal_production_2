@@ -11,7 +11,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState('pen'); // 'pen', 'eraser', 'lasso'
-  const [brushColor, setBrushColor] = useState('#ef4444');
+  const [brushColor, setBrushColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(3);
   const [eraserSize, setEraserSize] = useState(4);
   const [penShape, setPenShape] = useState('round');
@@ -42,8 +42,8 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, selX: 0, selY: 0 });
   const [showSubMenu, setShowSubMenu] = useState(true);
 
-  const [palette, setPalette] = useState(['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#a855f7', '#f97316', '#8b4513','#38bdf8','#166534', '#333333', '#9ca3af', '#ffffff']);
-  const [replaceModeColor, setReplaceModeColor] = useState(null);
+  const baseColors = ['#000000', '#ffffff', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#a855f7'];
+  const [savedColors, setSavedColors] = useState([]);
   const brushSizeMap = { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 };
   const eraserSizeMap = { 1: 5, 2: 12, 3: 24, 4: 40, 5: 60 };
 
@@ -151,7 +151,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
   const handleToolChange = (newTool) => {
     if (selection) commitSelection();
-    setReplaceModeColor(null);
+
     if (tool === newTool) {
       if (newTool === 'shape' || newTool === 'text') {
         setShowSubMenu(!showSubMenu);
@@ -432,9 +432,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     }
     const { x, y } = getCoordinates(e);
 
-    if (replaceModeColor && tool !== 'eyedropper') {
-      setReplaceModeColor(null);
-    }
+
 
 
     if (tool === 'fill') {
@@ -452,7 +450,12 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
       if (pixel[3] > 0) {
         const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
         setBrushColor(hex);
-        setReplaceModeColor(hex);
+        setSavedColors(prev => {
+          if (prev.includes(hex)) return prev;
+          const newSaved = [...prev, hex];
+          if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+          return newSaved;
+        });
         setTool('pen');
       }
       return;
@@ -863,27 +866,42 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', left: isVirtualCanvas ? 'calc(50% + 100px)' : '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <PenTool size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Eraser size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MousePointer2 size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Pipette size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('text')} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Type size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <PaintBucket size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('shape')} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Shapes size={18} /> 
-            </button>
+            {/* 描画カテゴリ */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>描画</span>
+              <div style={{ display: 'flex', gap: '0.2rem' }}>
+                <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PenTool size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Eraser size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('text')} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Type size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('shape')} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Shapes size={18} /> 
+                </button>
+              </div>
+            </div>
+
+            <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
+
+            {/* 編集カテゴリ */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>編集</span>
+              <div style={{ display: 'flex', gap: '0.2rem' }}>
+                <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MousePointer2 size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Pipette size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PaintBucket size={18} /> 
+                </button>
+              </div>
+            </div>
           </div>
 
           {tool === 'shape' && showSubMenu && (
@@ -986,44 +1004,57 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
       {showUI && tool !== 'lasso' && tool !== 'eyedropper' && (
         <div style={{ position: 'absolute', top: '130px', right: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem' }}>カラー</div>
-          {replaceModeColor && (
-            <div style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '0.2rem', textAlign: 'center', width: '100%' }}>
-              置き換える<br/>パレットを選択
-            </div>
-          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            {palette.map((c, idx) => (
+            {baseColors.map((c) => (
               <button
-                key={`palette-${idx}`}
-                onClick={() => {
-                  if (replaceModeColor) {
-                    const newPalette = [...palette];
-                    newPalette[idx] = replaceModeColor;
-                    setPalette(newPalette);
-                    setReplaceModeColor(null);
-                    setTool('pen');
-                  } else {
-                    setBrushColor(c);
-                  }
-                }}
+                key={c}
+                onClick={() => setBrushColor(c)}
                 style={{
-                  width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : (replaceModeColor ? '2px dashed #ef4444' : '1px solid #ccc'), cursor: 'pointer', outline: 'none'
+                  width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
                 }}
               />
             ))}
+            {[0, 1, 2, 3, 4].map(i => {
+              const c = savedColors[i];
+              return c ? (
+                <button
+                  key={`saved-${i}`}
+                  onClick={() => setBrushColor(c)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
+                  }}
+                />
+              ) : (
+                <div
+                  key={`empty-${i}`}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: 'transparent', border: '1px dashed #cbd5e1'
+                  }}
+                />
+              );
+            })}
             <label 
               title="詳細なカラー設定"
               style={{ 
                 width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', 
-                border: !palette.includes(brushColor) ? '3px solid #334155' : '1px solid #ccc', 
+                border: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? '3px solid #334155' : '1px solid #ccc', 
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                background: !palette.includes(brushColor) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
+                background: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
               }}
             >
               <input
                 type="color"
                 value={brushColor}
                 onChange={(e) => setBrushColor(e.target.value)}
+                onBlur={(e) => {
+                  const val = e.target.value;
+                  setSavedColors(prev => {
+                    if (prev.includes(val)) return prev;
+                    const newSaved = [...prev, val];
+                    if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+                    return newSaved;
+                  });
+                }}
                 style={{ opacity: 0, position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer' }}
               />
             </label>

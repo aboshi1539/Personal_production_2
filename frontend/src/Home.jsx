@@ -9,7 +9,7 @@ function Home() {
     <div className="app-container" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div className="title-anim-wrapper">
         <div className="title-paint-bg"></div>
-        <h1 className="title title-text-reveal">BE IlLLUSTRATOR</h1>
+        <h1 className="title title-text-reveal">CREAPIT</h1>
         <div className="title-roller">
           <PaintRoller size={56} color="#ff7b00" style={{ filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.2))' }} />
         </div>
