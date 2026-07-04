@@ -3,7 +3,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, Video, X, Settings, Maximize, Palette, Play, Pause } from 'lucide-react';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, Video, X, Settings, Maximize, Palette, Play, Pause, Link, Unlink } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
@@ -329,6 +329,15 @@ export default function Draw3D() {
   const [showResizePanel, setShowResizePanel] = useState(false);
   const [showAppearancePanel, setShowAppearancePanel] = useState(false);
   const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+  const [animVertical, setAnimVertical] = useState(false);
+  const [animVerticalDist, setAnimVerticalDist] = useState(10);
+  const [animVerticalSpeed, setAnimVerticalSpeed] = useState(1);
+  const [animHorizontal, setAnimHorizontal] = useState(false);
+  const [animHorizontalDist, setAnimHorizontalDist] = useState(10);
+  const [animHorizontalSpeed, setAnimHorizontalSpeed] = useState(1);
+  const [animDepth, setAnimDepth] = useState(false);
+  const [animDepthDist, setAnimDepthDist] = useState(10);
+  const [animDepthSpeed, setAnimDepthSpeed] = useState(1);
   const handleVirtualCanvasComplete = (dataUrlOrUrls, aspect, scaleFactor = 1, shape = 'plane') => {
     setShowVirtualCanvas(false);
     setIsDrawingMode(true);
@@ -428,7 +437,7 @@ export default function Draw3D() {
 
   const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
 
-  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isDrawingMode, setIsDrawingMode] = useState(true);
   const [tool, setTool] = useState('camera'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
 
   const [brushColor, setBrushColor] = useState('#000000');
@@ -448,12 +457,28 @@ export default function Draw3D() {
 
   const handleObjectClick = (e, type, index) => {
     if (showPropertyPanel || showResizePanel || showAppearancePanel) {
-      e.stopPropagation();
+      let targetObj;
       if (type === 'box') {
-        setSelection({ strokeIndices: [], boxIndices: [index], textIndices: [] });
+        targetObj = boxesRef.current[index];
       } else if (type === 'text') {
-        setSelection({ strokeIndices: [], boxIndices: [], textIndices: [index] });
+        targetObj = textsRef.current[index];
       }
+
+      const sIds = [];
+      const bIds = [];
+      const tIds = [];
+
+      if (targetObj && targetObj.groupId) {
+        const gid = targetObj.groupId;
+        strokesRef.current.forEach((s, i) => { if (s.groupId === gid) sIds.push(i); });
+        boxesRef.current.forEach((b, i) => { if (b.groupId === gid) bIds.push(i); });
+        textsRef.current.forEach((t, i) => { if (t.groupId === gid) tIds.push(i); });
+      } else {
+        if (type === 'box') bIds.push(index);
+        if (type === 'text') tIds.push(index);
+      }
+      
+      setSelection({ strokeIndices: sIds, boxIndices: bIds, textIndices: tIds });
     }
   };
 
@@ -579,6 +604,61 @@ export default function Draw3D() {
     setTexts(nextTexts);
     setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
     setTool('lasso');
+    setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
+  };
+
+  const handleGroup = () => {
+    if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
+    
+    const gid = Date.now().toString();
+    const nextStrokes = [...strokesRef.current];
+    selection.strokeIndices.forEach(idx => { nextStrokes[idx] = { ...nextStrokes[idx], groupId: gid }; });
+    
+    const nextBoxes = [...boxesRef.current];
+    selection.boxIndices.forEach(idx => { nextBoxes[idx] = { ...nextBoxes[idx], groupId: gid }; });
+    
+    const nextTexts = [...textsRef.current];
+    selection.textIndices.forEach(idx => { nextTexts[idx] = { ...nextTexts[idx], groupId: gid }; });
+    
+    setStrokes(nextStrokes);
+    setBoxes(nextBoxes);
+    setTexts(nextTexts);
+    setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
+  };
+
+  const handleUngroup = () => {
+    if (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0) return;
+    
+    const nextStrokes = [...strokesRef.current];
+    selection.strokeIndices.forEach(idx => { 
+      if (nextStrokes[idx].groupId) {
+        const copy = { ...nextStrokes[idx] };
+        delete copy.groupId;
+        nextStrokes[idx] = copy;
+      }
+    });
+    
+    const nextBoxes = [...boxesRef.current];
+    selection.boxIndices.forEach(idx => { 
+      if (nextBoxes[idx].groupId) {
+        const copy = { ...nextBoxes[idx] };
+        delete copy.groupId;
+        nextBoxes[idx] = copy;
+      }
+    });
+    
+    const nextTexts = [...textsRef.current];
+    selection.textIndices.forEach(idx => { 
+      if (nextTexts[idx].groupId) {
+        const copy = { ...nextTexts[idx] };
+        delete copy.groupId;
+        nextTexts[idx] = copy;
+      }
+    });
+    
+    setStrokes(nextStrokes);
+    setBoxes(nextBoxes);
+    setTexts(nextTexts);
     setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
   };
 
@@ -1085,6 +1165,17 @@ export default function Draw3D() {
         }
       });
 
+      const groupIdsToSelect = new Set();
+      strokeIndices.forEach(i => { if (strokesRef.current[i].groupId) groupIdsToSelect.add(strokesRef.current[i].groupId); });
+      boxIndices.forEach(i => { if (boxesRef.current[i].groupId) groupIdsToSelect.add(boxesRef.current[i].groupId); });
+      textIndices.forEach(i => { if (textsRef.current[i].groupId) groupIdsToSelect.add(textsRef.current[i].groupId); });
+
+      if (groupIdsToSelect.size > 0) {
+        strokesRef.current.forEach((s, i) => { if (s.groupId && groupIdsToSelect.has(s.groupId) && !strokeIndices.includes(i)) strokeIndices.push(i); });
+        boxesRef.current.forEach((b, i) => { if (b.groupId && groupIdsToSelect.has(b.groupId) && !boxIndices.includes(i)) boxIndices.push(i); });
+        textsRef.current.forEach((t, i) => { if (t.groupId && groupIdsToSelect.has(t.groupId) && !textIndices.includes(i)) textIndices.push(i); });
+      }
+
       setSelection({ strokeIndices, boxIndices, textIndices });
       if (strokeIndices.length > 0 || boxIndices.length > 0 || textIndices.length > 0) {
         setTool('move');
@@ -1535,6 +1626,8 @@ export default function Draw3D() {
                 <button onClick={() => handleFlip('x')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={20} /> 左右反転</button>
                 <button onClick={() => handleFlip('y')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipVertical size={20} /> 上下反転</button>
                 <button onClick={() => handleFlip('z')} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={20} style={{ transform: 'rotate(-45deg)' }} /> 前後反転</button>
+                <button onClick={handleGroup} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><Link size={20} /> グループ化</button>
+                <button onClick={handleUngroup} style={{ padding: '0.3rem 0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><Unlink size={20} /> グループ解除</button>
                 <button onClick={handleDeleteSelection} style={{ padding: '0.3rem 0.5rem', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}><Trash2 size={20} /> 削除</button>
                 <button onClick={() => { setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] }); setTool('lasso'); }} style={{ padding: '0.3rem 0.5rem', background: '#fef2f2', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}><X size={20} /> 選択解除</button>
               </div>
@@ -1657,9 +1750,47 @@ export default function Draw3D() {
       {showUI && showAnimationPanel && (
         <div style={{ position: 'absolute', top: '100px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px' }}>
           <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>動きを設定</div>
-          <button style={{ padding: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>縦に動く</button>
-          <button style={{ padding: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>横に動く</button>
-          <button style={{ padding: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>奥に動く</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <input type="checkbox" checked={animVertical} onChange={(e) => setAnimVertical(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に動く
+            </label>
+            {animVertical && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animVerticalDist}</span></label>
+                <input type="range" min="1" max="50" value={animVerticalDist} onChange={(e) => setAnimVerticalDist(Number(e.target.value))} />
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animVerticalSpeed}</span></label>
+                <input type="range" min="0.1" max="5" step="0.1" value={animVerticalSpeed} onChange={(e) => setAnimVerticalSpeed(Number(e.target.value))} />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <input type="checkbox" checked={animHorizontal} onChange={(e) => setAnimHorizontal(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に動く
+            </label>
+            {animHorizontal && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animHorizontalDist}</span></label>
+                <input type="range" min="1" max="50" value={animHorizontalDist} onChange={(e) => setAnimHorizontalDist(Number(e.target.value))} />
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animHorizontalSpeed}</span></label>
+                <input type="range" min="0.1" max="5" step="0.1" value={animHorizontalSpeed} onChange={(e) => setAnimHorizontalSpeed(Number(e.target.value))} />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <input type="checkbox" checked={animDepth} onChange={(e) => setAnimDepth(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に動く
+            </label>
+            {animDepth && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animDepthDist}</span></label>
+                <input type="range" min="1" max="50" value={animDepthDist} onChange={(e) => setAnimDepthDist(Number(e.target.value))} />
+                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animDepthSpeed}</span></label>
+                <input type="range" min="0.1" max="5" step="0.1" value={animDepthSpeed} onChange={(e) => setAnimDepthSpeed(Number(e.target.value))} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
