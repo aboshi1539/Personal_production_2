@@ -329,15 +329,6 @@ export default function Draw3D() {
   const [showResizePanel, setShowResizePanel] = useState(false);
   const [showAppearancePanel, setShowAppearancePanel] = useState(false);
   const [showAnimationPanel, setShowAnimationPanel] = useState(false);
-  const [animVertical, setAnimVertical] = useState(false);
-  const [animVerticalDist, setAnimVerticalDist] = useState(10);
-  const [animVerticalSpeed, setAnimVerticalSpeed] = useState(1);
-  const [animHorizontal, setAnimHorizontal] = useState(false);
-  const [animHorizontalDist, setAnimHorizontalDist] = useState(10);
-  const [animHorizontalSpeed, setAnimHorizontalSpeed] = useState(1);
-  const [animDepth, setAnimDepth] = useState(false);
-  const [animDepthDist, setAnimDepthDist] = useState(10);
-  const [animDepthSpeed, setAnimDepthSpeed] = useState(1);
   const handleVirtualCanvasComplete = (dataUrlOrUrls, aspect, scaleFactor = 1, shape = 'plane') => {
     setShowVirtualCanvas(false);
     setIsDrawingMode(true);
@@ -456,7 +447,7 @@ export default function Draw3D() {
   };
 
   const handleObjectClick = (e, type, index) => {
-    if (showPropertyPanel || showResizePanel || showAppearancePanel) {
+    if (showPropertyPanel || showResizePanel || showAppearancePanel || showAnimationPanel) {
       let targetObj;
       if (type === 'box') {
         targetObj = boxesRef.current[index];
@@ -1747,52 +1738,77 @@ export default function Draw3D() {
       )}
 
       {/* アニメーションパネル (右側) */}
-      {showUI && showAnimationPanel && (
-        <div style={{ position: 'absolute', top: '100px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>動きを設定</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-              <input type="checkbox" checked={animVertical} onChange={(e) => setAnimVertical(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に動く
-            </label>
-            {animVertical && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animVerticalDist}</span></label>
-                <input type="range" min="1" max="50" value={animVerticalDist} onChange={(e) => setAnimVerticalDist(Number(e.target.value))} />
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animVerticalSpeed}</span></label>
-                <input type="range" min="0.1" max="5" step="0.1" value={animVerticalSpeed} onChange={(e) => setAnimVerticalSpeed(Number(e.target.value))} />
-              </div>
-            )}
-          </div>
+      {showUI && showAnimationPanel && (() => {
+        const obj = selection.boxIndices.length > 0 ? boxes[selection.boxIndices[0]]
+          : selection.textIndices.length > 0 ? texts[selection.textIndices[0]]
+            : null;
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-              <input type="checkbox" checked={animHorizontal} onChange={(e) => setAnimHorizontal(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に動く
-            </label>
-            {animHorizontal && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animHorizontalDist}</span></label>
-                <input type="range" min="1" max="50" value={animHorizontalDist} onChange={(e) => setAnimHorizontalDist(Number(e.target.value))} />
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animHorizontalSpeed}</span></label>
-                <input type="range" min="0.1" max="5" step="0.1" value={animHorizontalSpeed} onChange={(e) => setAnimHorizontalSpeed(Number(e.target.value))} />
-              </div>
-            )}
-          </div>
+        const aVert = obj?.animVertical || false;
+        const aVertDist = obj?.animVerticalDist || 10;
+        const aVertSpeed = obj?.animVerticalSpeed || 1;
+        const aHorz = obj?.animHorizontal || false;
+        const aHorzDist = obj?.animHorizontalDist || 10;
+        const aHorzSpeed = obj?.animHorizontalSpeed || 1;
+        const aDepth = obj?.animDepth || false;
+        const aDepthDist = obj?.animDepthDist || 10;
+        const aDepthSpeed = obj?.animDepthSpeed || 1;
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-              <input type="checkbox" checked={animDepth} onChange={(e) => setAnimDepth(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に動く
-            </label>
-            {animDepth && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{animDepthDist}</span></label>
-                <input type="range" min="1" max="50" value={animDepthDist} onChange={(e) => setAnimDepthDist(Number(e.target.value))} />
-                <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{animDepthSpeed}</span></label>
-                <input type="range" min="0.1" max="5" step="0.1" value={animDepthSpeed} onChange={(e) => setAnimDepthSpeed(Number(e.target.value))} />
+        return (
+          <div style={{ position: 'absolute', top: '100px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>動きを設定</div>
+            
+            {!obj ? (
+              <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                仮想キャンバスや図形を<br />クリックして選択してください
               </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    <input type="checkbox" checked={aVert} onChange={(e) => updateObjectProperty('animVertical', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に動く
+                  </label>
+                  {aVert && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aVertDist}</span></label>
+                      <input type="range" min="1" max="50" value={aVertDist} onChange={(e) => updateObjectProperty('animVerticalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aVertSpeed}</span></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aVertSpeed} onChange={(e) => updateObjectProperty('animVerticalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    <input type="checkbox" checked={aHorz} onChange={(e) => updateObjectProperty('animHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に動く
+                  </label>
+                  {aHorz && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aHorzDist}</span></label>
+                      <input type="range" min="1" max="50" value={aHorzDist} onChange={(e) => updateObjectProperty('animHorizontalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aHorzSpeed}</span></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aHorzSpeed} onChange={(e) => updateObjectProperty('animHorizontalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    <input type="checkbox" checked={aDepth} onChange={(e) => updateObjectProperty('animDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に動く
+                  </label>
+                  {aDepth && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aDepthDist}</span></label>
+                      <input type="range" min="1" max="50" value={aDepthDist} onChange={(e) => updateObjectProperty('animDepthDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aDepthSpeed}</span></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aDepthSpeed} onChange={(e) => updateObjectProperty('animDepthSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 5. プロパティパネル (右側) */}
       {showUI && showPropertyPanel && (() => {
