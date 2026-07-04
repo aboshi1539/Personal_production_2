@@ -10,10 +10,10 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
-  "homepage": "https://aboshi1539.github.io/Personal_production_2",
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "framer-motion": "^12.42.2",
     "lucide-react": "^1.21.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload } from 'lucide-react';
+import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut } from 'lucide-react';
 import './index.css';
 
-export default function Draw2D() {
+export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = 'plane', onVirtualCanvasComplete, onVirtualCanvasCancel }) {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -11,7 +11,7 @@ export default function Draw2D() {
   
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState('pen'); // 'pen', 'eraser', 'lasso'
-  const [brushColor, setBrushColor] = useState('#ef4444');
+  const [brushColor, setBrushColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(3);
   const [eraserSize, setEraserSize] = useState(4);
   const [penShape, setPenShape] = useState('round');
@@ -21,6 +21,16 @@ export default function Draw2D() {
   
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [lastSavedIndex, setLastSavedIndex] = useState(0);
+  const [showConfirmHome, setShowConfirmHome] = useState(false);
+  const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
+  const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
+  const [globalZoom, setGlobalZoom] = useState(1);
+
+  const [cubeFaceIndex, setCubeFaceIndex] = useState(4); // 4 = Front
+  const [cubeFacesState, setCubeFacesState] = useState(
+    Array(6).fill(null).map(() => ({ history: [], historyIndex: -1 }))
+  );
 
   const [shapeType, setShapeType] = useState('circle');
   const [shapeStart, setShapeStart] = useState(null);
@@ -32,8 +42,8 @@ export default function Draw2D() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, selX: 0, selY: 0 });
   const [showSubMenu, setShowSubMenu] = useState(true);
 
-  const [palette, setPalette] = useState(['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#a855f7', '#f97316', '#8b4513','#38bdf8','#166534', '#333333', '#9ca3af', '#ffffff']);
-  const [replaceModeColor, setReplaceModeColor] = useState(null);
+  const baseColors = ['#000000', '#ffffff', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#a855f7'];
+  const [savedColors, setSavedColors] = useState([]);
   const brushSizeMap = { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 };
   const eraserSizeMap = { 1: 5, 2: 12, 3: 24, 4: 40, 5: 60 };
 
@@ -42,11 +52,15 @@ export default function Draw2D() {
     if (!canvas) return;
     const dataUrl = canvas.toDataURL();
     setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
+      let newHistory = prev.slice(0, historyIndex + 1);
+      if (newHistory[newHistory.length - 1] === dataUrl) return newHistory;
       newHistory.push(dataUrl);
+      if (newHistory.length > 19) {
+        newHistory = newHistory.slice(newHistory.length - 19);
+      }
+      setHistoryIndex(newHistory.length - 1);
       return newHistory;
     });
-    setHistoryIndex(prev => prev + 1);
   }, [historyIndex]);
 
   useEffect(() => {
@@ -88,6 +102,32 @@ export default function Draw2D() {
     return () => window.removeEventListener('resize', updateSize);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleFaceSwitch = (newIndex) => {
+    if (newIndex === cubeFaceIndex) return;
+
+    const nextFaces = [...cubeFacesState];
+    nextFaces[cubeFaceIndex] = { history: [...history], historyIndex };
+    setCubeFacesState(nextFaces);
+
+    const loadFace = nextFaces[newIndex];
+    setHistory(loadFace.history);
+    setHistoryIndex(loadFace.historyIndex);
+
+    const canvas = canvasRef.current;
+    const context = contextRef.current;
+    context.globalCompositeOperation = 'source-over';
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (loadFace.historyIndex >= 0 && loadFace.history.length > 0) {
+      const img = new Image();
+      img.src = loadFace.history[loadFace.historyIndex];
+      img.onload = () => {
+        context.drawImage(img, 0, 0, canvas.width / 2, canvas.height / 2);
+      };
+    }
+
+    setCubeFaceIndex(newIndex);
+  };
+
   const commitSelectionToCanvas = (sel) => {
     const ctx = contextRef.current;
     ctx.save();
@@ -115,7 +155,7 @@ export default function Draw2D() {
 
   const handleToolChange = (newTool) => {
     if (selection) commitSelection();
-    setReplaceModeColor(null);
+
     if (tool === newTool) {
       if (newTool === 'shape' || newTool === 'text') {
         setShowSubMenu(!showSubMenu);
@@ -264,13 +304,13 @@ export default function Draw2D() {
     const rect = canvasRef.current.getBoundingClientRect();
     if (e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
       return {
-        x: e.nativeEvent.touches[0].clientX - rect.left,
-        y: e.nativeEvent.touches[0].clientY - rect.top
+        x: (e.nativeEvent.touches[0].clientX - rect.left) / globalZoom,
+        y: (e.nativeEvent.touches[0].clientY - rect.top) / globalZoom
       };
     }
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: (e.clientX - rect.left) / globalZoom,
+      y: (e.clientY - rect.top) / globalZoom
     };
   };
 
@@ -283,10 +323,10 @@ export default function Draw2D() {
       if (p.y > maxY) maxY = p.y;
     });
     
-    minX = Math.max(0, minX - 2);
-    minY = Math.max(0, minY - 2);
-    maxX = Math.min(window.innerWidth, maxX + 2);
-    maxY = Math.min(window.innerHeight, maxY + 2);
+    minX = Math.floor(Math.max(0, minX - 2));
+    minY = Math.floor(Math.max(0, minY - 2));
+    maxX = Math.ceil(Math.min(canvasRef.current.width / 2, maxX + 2));
+    maxY = Math.ceil(Math.min(canvasRef.current.height / 2, maxY + 2));
     
     const width = maxX - minX;
     const height = maxY - minY;
@@ -316,12 +356,14 @@ export default function Draw2D() {
 
     const imageData = tempCtx.getImageData(0, 0, width * 2, height * 2);
     const data = imageData.data;
-    let tightMinX = width * 2, tightMinY = height * 2, tightMaxX = 0, tightMaxY = 0;
+    const imgWidth = imageData.width;
+    const imgHeight = imageData.height;
+    let tightMinX = imgWidth, tightMinY = imgHeight, tightMaxX = 0, tightMaxY = 0;
     let hasPixels = false;
 
-    for (let y = 0; y < height * 2; y++) {
-      for (let x = 0; x < width * 2; x++) {
-        const alpha = data[(y * width * 2 + x) * 4 + 3];
+    for (let y = 0; y < imgHeight; y++) {
+      for (let x = 0; x < imgWidth; x++) {
+        const alpha = data[(y * imgWidth + x) * 4 + 3];
         if (alpha > 0) {
           hasPixels = true;
           if (x < tightMinX) tightMinX = x;
@@ -389,11 +431,12 @@ export default function Draw2D() {
   };
 
   const startDrawing = (e) => {
+    if (e.target.setPointerCapture) {
+      e.target.setPointerCapture(e.pointerId);
+    }
     const { x, y } = getCoordinates(e);
 
-    if (replaceModeColor && tool !== 'eyedropper') {
-      setReplaceModeColor(null);
-    }
+
 
 
     if (tool === 'fill') {
@@ -411,7 +454,12 @@ export default function Draw2D() {
       if (pixel[3] > 0) {
         const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
         setBrushColor(hex);
-        setReplaceModeColor(hex);
+        setSavedColors(prev => {
+          if (prev.includes(hex)) return prev;
+          const newSaved = [...prev, hex];
+          if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+          return newSaved;
+        });
         setTool('pen');
       }
       return;
@@ -516,7 +564,10 @@ export default function Draw2D() {
     contextRef.current.stroke();
   };
 
-  const finishDrawing = () => {
+  const finishDrawing = (e) => {
+    if (e && e.target && e.target.releasePointerCapture && e.target.hasPointerCapture && e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
     if (tool === 'lasso' && isDraggingSelection) {
       setIsDraggingSelection(false);
       return;
@@ -634,6 +685,8 @@ export default function Draw2D() {
     link.download = filename.endsWith('.png') || filename.endsWith('.jpeg') || filename.endsWith('.jpg') ? filename : `${filename}.png`;
     link.href = dataUrl;
     link.click();
+    
+    setLastSavedIndex(selection ? historyIndex + 1 : historyIndex);
   };
 
   const handleUpload = (e) => {
@@ -736,68 +789,123 @@ export default function Draw2D() {
     e.target.value = '';
   };
 
+  const isCanvasEmpty = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return true;
+    const ctx = contextRef.current;
+    if (!ctx) return true;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = new Uint32Array(imageData.data.buffer);
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
+  };
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
-      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-        <button 
-          className="start-button" 
-          onClick={() => setShowUI(!showUI)} 
-          title={showUI ? "メニューを非表示" : "メニューを表示"}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.8rem' }}
-        >
-          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
+      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         
         {showUI && (
           <>
-            <button className="start-button" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem' }}>
-              <HomeIcon size={20} /> 
-            </button>
-            <button 
-              className="start-button" 
-              onClick={undo} 
-              disabled={historyIndex <= 0}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
-            >
-              <Undo2 size={20} /> 
-            </button>
-            <button 
-              className="start-button" 
-              onClick={redo} 
-              disabled={historyIndex >= history.length - 1}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-            >
-              <Redo2 size={20} /> 
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                className="start-button" 
+                onClick={undo} 
+                disabled={historyIndex <= 0}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <Undo2 size={20} /> 
+              </button>
+              <button 
+                className="start-button" 
+                onClick={redo} 
+                disabled={historyIndex >= history.length - 1}
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+              >
+                <Redo2 size={20} /> 
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="start-button"
+                onClick={() => setGlobalZoom(prev => Math.min(prev * 1.2, 5))}
+                title="ズームイン"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomIn size={20} />
+              </button>
+              <button
+                className="start-button"
+                onClick={() => setGlobalZoom(prev => Math.max(prev / 1.2, 0.2))}
+                title="ズームアウト"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ZoomOut size={20} />
+              </button>
+            </div>
+
+            {isVirtualCanvas && (
+              <>
+                <button 
+                  onClick={() => setShowVirtualCompleteConfirm(true)} 
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                >
+                  <Square size={18} /> 完了
+                </button>
+                <button 
+                  onClick={() => setShowVirtualCancelConfirm(true)} 
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#fef2f2', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                >
+                  キャンセル
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
 
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ position: 'absolute', top: '20px', left: isVirtualCanvas ? 'calc(50% + 100px)' : '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <PenTool size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Eraser size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MousePointer2 size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Pipette size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('text')} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Type size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <PaintBucket size={18} /> 
-            </button>
-            <button onClick={() => handleToolChange('shape')} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Shapes size={18} /> 
-            </button>
+            {/* 描画カテゴリ */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>描画</span>
+              <div style={{ display: 'flex', gap: '0.2rem' }}>
+                <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PenTool size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Eraser size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('text')} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Type size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('shape')} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Shapes size={18} /> 
+                </button>
+              </div>
+            </div>
+
+            <div style={{ width: '1px', background: '#cbd5e1', margin: '0 4px' }} />
+
+            {/* 編集カテゴリ */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>編集</span>
+              <div style={{ display: 'flex', gap: '0.2rem' }}>
+                <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MousePointer2 size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Pipette size={18} /> 
+                </button>
+                <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PaintBucket size={18} /> 
+                </button>
+              </div>
+            </div>
           </div>
 
           {tool === 'shape' && showSubMenu && (
@@ -898,46 +1006,59 @@ export default function Draw2D() {
 
       {/* 2. カラーパレット (右側縦並び) */}
       {showUI && tool !== 'lasso' && tool !== 'eyedropper' && (
-        <div style={{ position: 'absolute', top: '50%', right: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '130px', right: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '-0.5rem' }}>カラー</div>
-          {replaceModeColor && (
-            <div style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '0.2rem', textAlign: 'center', width: '100%' }}>
-              置き換える<br/>パレットを選択
-            </div>
-          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            {palette.map((c, idx) => (
+            {baseColors.map((c) => (
               <button
-                key={`palette-${idx}`}
-                onClick={() => {
-                  if (replaceModeColor) {
-                    const newPalette = [...palette];
-                    newPalette[idx] = replaceModeColor;
-                    setPalette(newPalette);
-                    setReplaceModeColor(null);
-                    setTool('pen');
-                  } else {
-                    setBrushColor(c);
-                  }
-                }}
+                key={c}
+                onClick={() => setBrushColor(c)}
                 style={{
-                  width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : (replaceModeColor ? '2px dashed #ef4444' : '1px solid #ccc'), cursor: 'pointer', outline: 'none'
+                  width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
                 }}
               />
             ))}
+            {[0, 1, 2, 3, 4].map(i => {
+              const c = savedColors[i];
+              return c ? (
+                <button
+                  key={`saved-${i}`}
+                  onClick={() => setBrushColor(c)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: c, border: brushColor === c ? '3px solid #334155' : '1px solid #ccc', cursor: 'pointer', outline: 'none'
+                  }}
+                />
+              ) : (
+                <div
+                  key={`empty-${i}`}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', background: 'transparent', border: '1px dashed #cbd5e1'
+                  }}
+                />
+              );
+            })}
             <label 
               title="詳細なカラー設定"
               style={{ 
                 width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', 
-                border: !palette.includes(brushColor) ? '3px solid #334155' : '1px solid #ccc', 
+                border: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? '3px solid #334155' : '1px solid #ccc', 
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                background: !palette.includes(brushColor) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
+                background: (!baseColors.includes(brushColor) && !savedColors.includes(brushColor)) ? brushColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
               }}
             >
               <input
                 type="color"
                 value={brushColor}
                 onChange={(e) => setBrushColor(e.target.value)}
+                onBlur={(e) => {
+                  const val = e.target.value;
+                  setSavedColors(prev => {
+                    if (prev.includes(val)) return prev;
+                    const newSaved = [...prev, val];
+                    if (newSaved.length > 5) return newSaved.slice(newSaved.length - 5);
+                    return newSaved;
+                  });
+                }}
                 style={{ opacity: 0, position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer' }}
               />
             </label>
@@ -947,7 +1068,7 @@ export default function Draw2D() {
 
       {/* 3. ペン/消しゴムの太さ (左側縦並び) */}
       {showUI && tool !== 'lasso' && tool !== 'eyedropper' && tool !== 'fill' && tool !== 'text' && (
-        <div style={{ position: 'absolute', top: '50%', left: '20px', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', background: 'rgba(255,255,255,0.9)', padding: '1rem 0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: '130px', left: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', background: 'rgba(255,255,255,0.9)', padding: '1rem 0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.2rem', textAlign: 'center', width: '50px' }}>
             {tool === 'eraser' ? '消しゴムの太さ' : 'ペンの太さ'}
           </div>
@@ -993,16 +1114,64 @@ export default function Draw2D() {
       {/* 4. 保存＆全て消去ボタン (右上) */}
       {showUI && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Upload size={18} /> 読み込み
             <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
           </label>
-          <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Download size={18} /> 保存
           </button>
-          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
             <Trash2 size={18} /> 
           </button>
+        </div>
+      )}
+
+      {/* 画面右下 (ホームと非表示ボタン) */}
+      <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <button 
+          className="start-button" 
+          onClick={() => setShowUI(!showUI)} 
+          title={showUI ? "メニューを非表示" : "メニューを表示"}
+          style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+        {!isVirtualCanvas && (
+          <button className="start-button" onClick={() => {
+            if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
+              setShowConfirmHome(true);
+            } else {
+              navigate('/');
+            }
+          }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <HomeIcon size={20} /> 
+          </button>
+        )}
+      </div>
+
+      {showUI && isVirtualCanvas && virtualCanvasShape === 'cube' && (
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 'bold', textAlign: 'center', marginBottom: '0.5rem', color: '#475569' }}>描画する面を選択</div>
+          {['右面(Right)', '左面(Left)', '上面(Top)', '下面(Bottom)', '前面(Front)', '背面(Back)'].map((label, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleFaceSwitch(idx)}
+              style={{
+                padding: '0.6rem 1rem',
+                borderRadius: '8px',
+                background: cubeFaceIndex === idx ? '#3b82f6' : '#fff',
+                color: cubeFaceIndex === idx ? '#fff' : '#334155',
+                border: cubeFaceIndex === idx ? 'none' : '1px solid #cbd5e1',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: cubeFaceIndex === idx ? '0 2px 8px rgba(59,130,246,0.4)' : 'none'
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -1017,7 +1186,8 @@ export default function Draw2D() {
           borderRadius: '12px', 
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)', 
           overflow: 'hidden',
-          border: '1px solid var(--glass-border)'
+          border: '1px solid var(--glass-border)',
+          cursor: tool === 'text' ? 'text' : tool === 'lasso' ? 'crosshair' : 'crosshair'
         }}
       >
         {tool === 'lasso' && lassoPoints.length > 0 && (
@@ -1028,6 +1198,17 @@ export default function Draw2D() {
               stroke="#3b82f6" 
               strokeWidth="3" 
             />
+            {lassoPoints.length > 1 && (
+              <line 
+                x1={lassoPoints[0].x} 
+                y1={lassoPoints[0].y} 
+                x2={lassoPoints[lassoPoints.length - 1].x} 
+                y2={lassoPoints[lassoPoints.length - 1].y} 
+                stroke="#3b82f6" 
+                strokeWidth="2" 
+                strokeDasharray="5,5" 
+              />
+            )}
           </svg>
         )}
 
@@ -1108,10 +1289,147 @@ export default function Draw2D() {
           onPointerDown={startDrawing}
           onPointerMove={draw}
           onPointerUp={finishDrawing}
-          onPointerOut={finishDrawing}
-          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+          onPointerCancel={finishDrawing}
+          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none', transform: `scale(${globalZoom})`, transformOrigin: 'center' }}
         />
       </div>
+
+      {showConfirmHome && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => navigate('/')}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowConfirmHome(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVirtualCompleteConfirm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#047857', fontSize: '1.2rem' }}>確認</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              完了してもよろしいでしょうか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => {
+                  setShowVirtualCompleteConfirm(false);
+                  if (onVirtualCanvasComplete) {
+                    if (virtualCanvasShape === 'cube') {
+                      const canvas = canvasRef.current;
+                      const currentDataUrl = canvas.toDataURL();
+                      const nextFaces = [...cubeFacesState];
+                      nextFaces[cubeFaceIndex] = { history: [...history], historyIndex };
+                      
+                      const urls = nextFaces.map((f, i) => {
+                        if (i === cubeFaceIndex) return currentDataUrl;
+                        if (f.historyIndex >= 0 && f.history.length > 0) {
+                           return f.history[f.historyIndex];
+                        }
+                        return '';
+                      });
+                      onVirtualCanvasComplete(urls, 1, 1, 'cube');
+                    } else {
+                      const canvas = canvasRef.current;
+                      const ctx = canvas.getContext('2d');
+                      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                      const data = imgData.data;
+                      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+                      let hasPixels = false;
+                      for (let y = 0; y < canvas.height; y++) {
+                        for (let x = 0; x < canvas.width; x++) {
+                          const alpha = data[(y * canvas.width + x) * 4 + 3];
+                          if (alpha > 0) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                            hasPixels = true;
+                          }
+                        }
+                      }
+                      if (!hasPixels) {
+                        onVirtualCanvasComplete(canvas.toDataURL(), canvas.width / canvas.height, 1, 'plane');
+                      } else {
+                        const padding = 2; // small padding to prevent edge clipping
+                        minX = Math.max(0, minX - padding);
+                        minY = Math.max(0, minY - padding);
+                        maxX = Math.min(canvas.width - 1, maxX + padding);
+                        maxY = Math.min(canvas.height - 1, maxY + padding);
+                        
+                        const cropWidth = maxX - minX + 1;
+                        const cropHeight = maxY - minY + 1;
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = cropWidth;
+                        tempCanvas.height = cropHeight;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.putImageData(ctx.getImageData(minX, minY, cropWidth, cropHeight), 0, 0);
+                        const scaleFactor = cropWidth / canvas.width;
+                        onVirtualCanvasComplete(tempCanvas.toDataURL(), cropWidth / cropHeight, scaleFactor, 'plane');
+                      }
+                    }
+                  }
+                }}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#10b981', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowVirtualCompleteConfirm(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVirtualCancelConfirm && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>確認</h3>
+            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              キャンセルしてもよろしいでしょうか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => {
+                  setShowVirtualCancelConfirm(false);
+                  if (onVirtualCanvasCancel) {
+                    onVirtualCanvasCancel();
+                  }
+                }}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
+              >
+                はい
+              </button>
+              <button 
+                onClick={() => setShowVirtualCancelConfirm(false)}
+                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
+              >
+                いいえ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
