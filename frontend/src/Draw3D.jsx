@@ -1607,14 +1607,15 @@ export default function Draw3D() {
                   <div style={{ display: 'flex', gap: '0.2rem' }}>
                     <button
                       onClick={() => {
-                        setShowVirtualCanvasMenu(prev => !prev);
+                        setVirtualCanvasShape('plane');
+                        setShowVirtualCanvas(true);
                         setShowPropertyPanel(false);
                         setShowResizePanel(false);
                         setShowAppearancePanel(false);
                         setShowAnimationPanel(false);
                         setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
                       }}
-                      style={{ padding: '0.5rem 1rem', background: showVirtualCanvasMenu ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ padding: '0.5rem 1rem', background: showVirtualCanvas ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       title="仮想キャンバスを開く"
                     >
                       <Square size={28} />
@@ -1698,24 +1699,7 @@ export default function Draw3D() {
             )}
           </div>
 
-          {showVirtualCanvasMenu && !isDrawingMode && (
-            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '8px' }}>
-              <button
-                onClick={() => { setVirtualCanvasShape('plane'); setShowVirtualCanvas(true); setShowVirtualCanvasMenu(false); }}
-                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                title="平面キャンバス"
-              >
-                <Square size={28} /> 平面
-              </button>
-              <button
-                onClick={() => { setVirtualCanvasShape('cube'); setShowVirtualCanvas(true); setShowVirtualCanvasMenu(false); }}
-                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                title="サイコロキャンバス"
-              >
-                <Shapes size={28} /> サイコロ
-              </button>
-            </div>
-          )}
+
 
           {isDrawingMode && tool === 'shape' && showSubMenu && (
             <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
