@@ -911,6 +911,23 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
                   <Redo2 size={28} /> 
                 </button>
               </div>
+
+              {isVirtualCanvas && (
+                <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.5rem' }}>
+                  <button 
+                    onClick={() => setShowVirtualCompleteConfirm(true)} 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0 1rem', height: '44px', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                  >
+                    <Square size={18} /> 完了
+                  </button>
+                  <button 
+                    onClick={() => setShowVirtualCancelConfirm(true)} 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0 1rem', height: '44px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -943,22 +960,6 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               </button>
             </div>
 
-            {isVirtualCanvas && (
-              <>
-                <button 
-                  onClick={() => setShowVirtualCompleteConfirm(true)} 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem', marginTop: '0.5rem' }}
-                >
-                  <Square size={18} /> 完了
-                </button>
-                <button 
-                  onClick={() => setShowVirtualCancelConfirm(true)} 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#fef2f2', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
-                >
-                  キャンセル
-                </button>
-              </>
-            )}
           </>
         ) : (
           <div style={{ height: 'calc(176px + 2.5rem)', width: '44px' }} />
