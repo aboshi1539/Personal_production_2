@@ -13,7 +13,7 @@ function Home() {
       <div className="app-container" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: '"Orbitron", sans-serif', paddingTop: '120px' }}>
         <div className="glass-panel" style={{ textAlign: 'center', padding: '2rem', width: '100%', marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '1.8rem', marginBottom: '1.5rem', color: 'var(--text-main)', fontFamily: '"Orbitron", sans-serif', lineHeight: '1.4' }}>
-            直感的な操作で<span style={{ color: '#ff7b00' }}>3D</span>と<span style={{ color: '#3b82f6' }}>2D</span>のアートワークを自由に作成できるWebアプリケーションです。
+            <span style={{ color: '#ff7b00' }}>CANVAS³</span>(キャンバスキューブ)は<br></br><span style={{ color: '#ff7b00' }}>3D</span>と<span style={{ color: '#3b82f6' }}>2D</span>のキャンバスで<strong>描く</strong>、<strong>創る</strong>、<strong>動かす</strong>ことができる<br></br>Webアプリケーションです。
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: '2rem', padding: '0 1rem' }}>
