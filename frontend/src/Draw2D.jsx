@@ -3,6 +3,58 @@ import { useNavigate } from 'react-router-dom';
 import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut } from 'lucide-react';
 import './index.css';
 
+function CustomCursor({ tool, brushColor }) {
+  const cursorRef = useRef(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (cursorRef.current) {
+        const style = window.getComputedStyle(e.target);
+        if (style.cursor !== 'auto' && style.cursor !== 'none' && style.cursor !== 'crosshair') {
+          cursorRef.current.style.opacity = 0;
+        } else {
+          cursorRef.current.style.opacity = 1;
+          cursorRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+        }
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const getIcon = () => {
+    switch (tool) {
+      case 'pen': return <PenTool size={24} color={brushColor} />;
+      case 'eraser': return <Eraser size={24} color="#000" />;
+      case 'fill': return <PaintBucket size={24} color={brushColor} />;
+      case 'shape': return <Shapes size={24} color={brushColor} />;
+      default: return null;
+    }
+  };
+
+  const icon = getIcon();
+  if (!icon) return null;
+
+  return (
+    <div
+      ref={cursorRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        pointerEvents: 'none',
+        zIndex: 9999,
+        transform: 'translate3d(-100px, -100px, 0)',
+        marginLeft: tool === 'pen' ? '-2px' : '-12px',
+        marginTop: tool === 'pen' ? '-22px' : '-12px',
+        transition: 'opacity 0.1s ease-in-out'
+      }}
+    >
+      {icon}
+    </div>
+  );
+}
+
 export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = 'plane', onVirtualCanvasComplete, onVirtualCanvasCancel }) {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
@@ -203,6 +255,25 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
       };
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   const handleClear = () => {
     const canvas = canvasRef.current;
@@ -804,6 +875,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
+      <CustomCursor tool={tool} brushColor={brushColor} />
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {showUI ? (
           <>
@@ -1205,7 +1277,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)', 
           overflow: 'hidden',
           border: '1px solid var(--glass-border)',
-          cursor: tool === 'text' ? 'text' : tool === 'lasso' ? 'crosshair' : 'crosshair'
+          cursor: ['pen', 'eraser', 'fill', 'shape'].includes(tool) ? 'none' : (tool === 'text' ? 'text' : 'crosshair')
         }}
       >
         {tool === 'lasso' && lassoPoints.length > 0 && (
@@ -1308,7 +1380,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           onPointerMove={draw}
           onPointerUp={finishDrawing}
           onPointerCancel={finishDrawing}
-          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none', transform: `scale(${globalZoom})`, transformOrigin: 'center' }}
+          style={{ display: 'block', cursor: ['pen', 'eraser', 'fill', 'shape'].includes(tool) ? 'none' : 'crosshair', touchAction: 'none', transform: `scale(${globalZoom})`, transformOrigin: 'center' }}
         />
       </div>
 

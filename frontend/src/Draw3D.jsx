@@ -331,6 +331,88 @@ function DrawingController({ isActive, tool, distance, setDistance, onPointerDow
   return null;
 }
 
+function TextPreview({ tool, textInput, textSize, brushColor, previewPosRef }) {
+  const meshRef = useRef();
+
+  useFrame(() => {
+    if (meshRef.current && previewPosRef.current) {
+      meshRef.current.position.set(...previewPosRef.current);
+    }
+  });
+
+  if (tool !== 'text') return null;
+
+  return (
+    <group ref={meshRef}>
+      <Text
+        color={brushColor}
+        fontSize={textSize}
+        anchorX="center"
+        anchorY="middle"
+        depthOffset={-1}
+        material-opacity={0.5}
+        material-transparent={true}
+      >
+        {textInput || 'テキスト'}
+      </Text>
+    </group>
+  );
+}
+
+function CustomCursor({ tool, brushColor }) {
+  const cursorRef = useRef(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (cursorRef.current) {
+        const style = window.getComputedStyle(e.target);
+        if (style.cursor !== 'auto' && style.cursor !== 'none') {
+          cursorRef.current.style.opacity = 0;
+        } else {
+          cursorRef.current.style.opacity = 1;
+          cursorRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+        }
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const getIcon = () => {
+    switch (tool) {
+      case 'pen': return <PenTool size={24} color={brushColor} />;
+      case 'eraser': return <Eraser size={24} color="#000" />;
+      case 'paint': return <PaintBucket size={24} color={brushColor} />;
+      case 'fill': return <PaintBucket size={24} color={brushColor} />;
+      case 'stamp': return <Circle size={24} color={brushColor} />;
+      case 'shape': return <Shapes size={24} color={brushColor} />;
+      default: return null;
+    }
+  };
+
+  const icon = getIcon();
+  if (!icon) return null;
+
+  return (
+    <div
+      ref={cursorRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        pointerEvents: 'none',
+        zIndex: 9999,
+        transform: 'translate3d(-100px, -100px, 0)',
+        marginLeft: tool === 'pen' ? '-2px' : '-12px',
+        marginTop: tool === 'pen' ? '-22px' : '-12px',
+        transition: 'opacity 0.1s ease-in-out'
+      }}
+    >
+      {icon}
+    </div>
+  );
+}
+
 export default function Draw3D() {
   const navigate = useNavigate();
   const [strokes, setStrokes] = useState([]);
@@ -457,6 +539,25 @@ export default function Draw3D() {
       setShowAppearancePanel(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const activeStrokeRef = useRef(null);
   const activeBoxRef = useRef(null);
@@ -1259,6 +1360,11 @@ export default function Draw3D() {
   };
 
   const handleSaveData = () => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const defaultName = `3d-drawing-${timestamp}`;
+    const fileName = window.prompt("保存するファイル名を入力してください", defaultName);
+    if (!fileName) return;
+
     const data = {
       strokes: strokesRef.current,
       boxes: boxesRef.current,
@@ -1268,8 +1374,8 @@ export default function Draw3D() {
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    link.download = `3d-drawing-${timestamp}.json`;
+    
+    link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
@@ -1297,6 +1403,7 @@ export default function Draw3D() {
 
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <CustomCursor tool={tool} brushColor={brushColor} />
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {showUI ? (
           <>
@@ -2244,7 +2351,11 @@ export default function Draw3D() {
         </div>
       )}
 
-      <Canvas onCreated={({ camera }) => { cameraRef.current = camera; }} camera={{ position: [0, 5, 20], fov: 50 }}>
+      <Canvas 
+        style={{ cursor: ['pen', 'eraser', 'paint', 'fill', 'stamp', 'shape'].includes(tool) ? 'none' : 'auto' }}
+        onCreated={({ camera }) => { cameraRef.current = camera; }} 
+        camera={{ position: [0, 5, 20], fov: 50 }}
+      >
         <Suspense fallback={null}>
           <ambientLight intensity={0.6} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
@@ -2257,6 +2368,14 @@ export default function Draw3D() {
           onPointerDown3D={onPointerDown3D}
           onPointerMove3D={onPointerMove3D}
           onPointerUp3D={onPointerUp3D}
+        />
+        
+        <TextPreview
+          tool={tool}
+          textInput={textInput}
+          textSize={textSize}
+          brushColor={brushColor}
+          previewPosRef={previewPosRef}
         />
 
         <group>
