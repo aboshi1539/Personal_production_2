@@ -805,36 +805,61 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        
-        {showUI && (
+        {showUI ? (
           <>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button 
-                className="start-button" 
-                onClick={undo} 
-                disabled={historyIndex <= 0}
-                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
-              >
-                <Undo2 size={20} /> 
-              </button>
-              <button 
-                className="start-button" 
-                onClick={redo} 
-                disabled={historyIndex >= history.length - 1}
-                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
-              >
-                <Redo2 size={20} /> 
-              </button>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+              {!isVirtualCanvas && (
+                <button className="start-button inverted" title="ホームに戻る" onClick={() => {
+                  if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
+                    setShowConfirmHome(true);
+                  } else {
+                    navigate('/');
+                  }
+                }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <HomeIcon size={28} />
+                </button>
+              )}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button 
+                  className="start-button" 
+                  title="元に戻す (Undo)"
+                  onClick={undo} 
+                  disabled={historyIndex <= 0}
+                  style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
+                >
+                  <Undo2 size={28} /> 
+                </button>
+                <button 
+                  className="start-button" 
+                  title="やり直す (Redo)"
+                  onClick={redo} 
+                  disabled={historyIndex >= history.length - 1}
+                  style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
+                >
+                  <Redo2 size={28} /> 
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="start-button"
+                onClick={handleClear}
+                title="全消去"
+                style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Trash2 size={28} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
                 className="start-button"
                 onClick={() => setGlobalZoom(prev => Math.min(prev * 1.2, 5))}
                 title="ズームイン"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <ZoomIn size={20} />
+                <ZoomIn size={28} />
               </button>
               <button
                 className="start-button"
@@ -842,7 +867,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
                 title="ズームアウト"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <ZoomOut size={20} />
+                <ZoomOut size={28} />
               </button>
             </div>
 
@@ -850,7 +875,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               <>
                 <button 
                   onClick={() => setShowVirtualCompleteConfirm(true)} 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ecfdf5', color: '#047857', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem', marginTop: '0.5rem' }}
                 >
                   <Square size={18} /> 完了
                 </button>
@@ -863,28 +888,41 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               </>
             )}
           </>
+        ) : (
+          <div style={{ height: 'calc(176px + 2.5rem)', width: '44px' }} />
         )}
+        
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <button
+            className="start-button"
+            onClick={() => setShowUI(!showUI)}
+            title={showUI ? "メニューを非表示" : "メニューを表示"}
+            style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {showUI ? <EyeOff size={28} /> : <Eye size={28} />}
+          </button>
+        </div>
       </div>
 
       {/* 1. ツール選択 (上部中央) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', left: isVirtualCanvas ? 'calc(50% + 100px)' : '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', top: '20px', left: isVirtualCanvas ? 'calc(50% + 100px)' : '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center' }}>
             {/* 描画カテゴリ */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>描画</span>
               <div style={{ display: 'flex', gap: '0.2rem' }}>
-                <button onClick={() => handleToolChange('pen')} style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <PenTool size={18} /> 
+                <button onClick={() => handleToolChange('pen')} title="ペン" style={{ padding: '0.5rem 1rem', background: tool === 'pen' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PenTool size={28} /> 
                 </button>
-                <button onClick={() => handleToolChange('eraser')} style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Eraser size={18} /> 
+                <button onClick={() => handleToolChange('eraser')} title="消しゴム" style={{ padding: '0.5rem 1rem', background: tool === 'eraser' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Eraser size={28} /> 
                 </button>
-                <button onClick={() => handleToolChange('text')} style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Type size={18} /> 
+                <button onClick={() => { handleToolChange('text'); setShowSubMenu(true); }} title="テキスト" style={{ padding: '0.5rem 1rem', background: tool === 'text' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Type size={28} /> 
                 </button>
-                <button onClick={() => handleToolChange('shape')} style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Shapes size={18} /> 
+                <button onClick={() => { handleToolChange('shape'); setShowSubMenu(true); }} title="図形" style={{ padding: '0.5rem 1rem', background: tool === 'shape' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Shapes size={28} /> 
                 </button>
               </div>
             </div>
@@ -895,21 +933,21 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>編集</span>
               <div style={{ display: 'flex', gap: '0.2rem' }}>
-                <button onClick={() => handleToolChange('lasso')} style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <MousePointer2 size={18} /> 
+                <button onClick={() => handleToolChange('lasso')} title="選択・移動" style={{ padding: '0.5rem 1rem', background: tool === 'lasso' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MousePointer2 size={28} /> 
                 </button>
-                <button onClick={() => handleToolChange('eyedropper')} style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Pipette size={18} /> 
+                <button onClick={() => handleToolChange('eyedropper')} title="スポイト" style={{ padding: '0.5rem 1rem', background: tool === 'eyedropper' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Pipette size={28} /> 
                 </button>
-                <button onClick={() => handleToolChange('fill')} style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <PaintBucket size={18} /> 
+                <button onClick={() => handleToolChange('fill')} title="塗りつぶし" style={{ padding: '0.5rem 1rem', background: tool === 'fill' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PaintBucket size={28} /> 
                 </button>
               </div>
             </div>
           </div>
 
           {tool === 'shape' && showSubMenu && (
-            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
               {[
                 { id: 'line', icon: <Minus size={16} />, label: '線' },
                 { id: 'circle', icon: <Circle size={16} />, label: '丸' },
@@ -934,7 +972,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           )}
 
           {(tool === 'lasso' && selection) && (
-            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
               <span style={{ fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', padding: '0 0.5rem' }}>選択中:</span>
               <button onClick={handleCopy} style={{ padding: '0.4rem 0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><Copy size={14} /> コピー</button>
               <button onClick={() => handleFlip('x')} style={{ padding: '0.4rem 0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><FlipHorizontal size={14} /> 左右反転</button>
@@ -969,7 +1007,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           )}
 
           {tool === 'text' && showSubMenu && (
-            <div style={{ display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>テキスト:</label>
                 <input 
@@ -998,6 +1036,54 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {(tool === 'pen' || tool === 'eraser') && (
+            <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                {tool === 'eraser' ? '消しゴムの太さ:' : 'ペンの太さ:'}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {[1, 2, 3, 4, 5].map(size => {
+                  const currentSize = tool === 'eraser' ? eraserSize : brushSize;
+                  const setSize = tool === 'eraser' ? setEraserSize : setBrushSize;
+                  return (
+                    <button
+                      key={size}
+                      onClick={() => setSize(size)}
+                      style={{
+                        width: '36px', height: '36px', borderRadius: '8px', background: currentSize === size ? '#e2e8f0' : '#fff', border: currentSize === size ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
+                      }}
+                    >
+                      <div style={{ width: `${size * 4}px`, height: `${size * 4}px`, borderRadius: penShape === 'round' ? '50%' : '2px', background: '#334155' }} />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ width: '1px', height: '24px', background: '#cbd5e1', margin: '0 4px' }} />
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => setPenShape('round')}
+                  style={{
+                    width: '36px', height: '36px', borderRadius: '8px', background: penShape === 'round' ? '#e2e8f0' : '#fff', border: penShape === 'round' ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
+                  }}
+                  title="丸ペン"
+                >
+                  <Circle size={18} />
+                </button>
+                <button
+                  onClick={() => setPenShape('square')}
+                  style={{
+                    width: '36px', height: '36px', borderRadius: '8px', background: penShape === 'square' ? '#e2e8f0' : '#fff', border: penShape === 'square' ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
+                  }}
+                  title="四角ペン"
+                >
+                  <Square size={18} />
+                </button>
               </div>
             </div>
           )}
@@ -1066,89 +1152,21 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
         </div>
       )}
 
-      {/* 3. ペン/消しゴムの太さ (左側縦並び) */}
-      {showUI && tool !== 'lasso' && tool !== 'eyedropper' && tool !== 'fill' && tool !== 'text' && (
-        <div style={{ position: 'absolute', top: '130px', left: '20px', transform: 'none', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', background: 'rgba(255,255,255,0.9)', padding: '1rem 0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.2rem', textAlign: 'center', width: '50px' }}>
-            {tool === 'eraser' ? '消しゴムの太さ' : 'ペンの太さ'}
-          </div>
-          {[1, 2, 3, 4, 5].map(size => {
-            const currentSize = tool === 'eraser' ? eraserSize : brushSize;
-            const setSize = tool === 'eraser' ? setEraserSize : setBrushSize;
-            return (
-              <button
-                key={size}
-                onClick={() => setSize(size)}
-                style={{
-                  width: '40px', height: '40px', borderRadius: '8px', background: currentSize === size ? '#e2e8f0' : '#fff', border: currentSize === size ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
-                }}
-              >
-                <div style={{ width: `${size * 3}px`, height: `${size * 3}px`, borderRadius: penShape === 'round' ? '50%' : '2px', background: 'var(--text-main)' }} />
-              </button>
-            );
-          })}
 
-          <div style={{ width: '100%', height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
-          
-          <button
-            onClick={() => setPenShape('round')}
-            style={{
-              width: '40px', height: '40px', borderRadius: '8px', background: penShape === 'round' ? '#e2e8f0' : '#fff', border: penShape === 'round' ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
-            }}
-            title="丸ペン"
-          >
-            <Circle size={20} />
-          </button>
-          <button
-            onClick={() => setPenShape('square')}
-            style={{
-              width: '40px', height: '40px', borderRadius: '8px', background: penShape === 'square' ? '#e2e8f0' : '#fff', border: penShape === 'square' ? '2px solid #334155' : '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
-            }}
-            title="四角ペン"
-          >
-            <Square size={20} />
-          </button>
-        </div>
-      )}
-
-      {/* 4. 保存＆全て消去ボタン (右上) */}
+      {/* 4. 保存＆読み込みボタン (右上) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Upload size={18} /> 読み込み
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <button title="保存" onClick={handleSave} style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Download size={24} />
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>保存</span>
+          </button>
+          <label title="読み込み" style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Upload size={24} />
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>読み込み</span>
             <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
           </label>
-          <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Download size={18} /> 保存
-          </button>
-          <button onClick={handleClear} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.8rem 1.2rem', background: '#ffe4e6', color: '#e11d48', border: '1px solid #fecdd3', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '1rem' }}>
-            <Trash2 size={18} /> 
-          </button>
         </div>
       )}
-
-      {/* 画面右下 (ホームと非表示ボタン) */}
-      <div style={{ position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <button 
-          className="start-button" 
-          onClick={() => setShowUI(!showUI)} 
-          title={showUI ? "メニューを非表示" : "メニューを表示"}
-          style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {showUI ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
-        {!isVirtualCanvas && (
-          <button className="start-button" onClick={() => {
-            if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
-              setShowConfirmHome(true);
-            } else {
-              navigate('/');
-            }
-          }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <HomeIcon size={20} /> 
-          </button>
-        )}
-      </div>
 
       {showUI && isVirtualCanvas && virtualCanvasShape === 'cube' && (
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>

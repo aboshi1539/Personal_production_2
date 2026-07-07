@@ -7,6 +7,42 @@ import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MouseP
 import './index.css';
 import Draw2D from './Draw2D';
 
+function AnimatedWrapper({ obj, children }) {
+  const groupRef = useRef();
+  
+  useFrame((state) => {
+    if (!groupRef.current || !obj) return;
+    const time = state.clock.getElapsedTime();
+    let dx = 0, dy = 0, dz = 0;
+    let rx = 0, ry = 0, rz = 0;
+    
+    if (obj.animPlayingHorizontal) {
+      dx = Math.sin(time * (obj.animHorizontalSpeed || 1)) * (obj.animHorizontalDist || 10);
+    }
+    if (obj.animPlayingVertical) {
+      dy = Math.sin(time * (obj.animVerticalSpeed || 1)) * (obj.animVerticalDist || 10);
+    }
+    if (obj.animPlayingDepth) {
+      dz = Math.sin(time * (obj.animDepthSpeed || 1)) * (obj.animDepthDist || 10);
+    }
+
+    if (obj.animPlayingRotHorizontal) { // Yaw, Y-axis
+      ry = Math.sin(time * (obj.animRotHorizontalSpeed || 1)) * (obj.animRotHorizontalDist || 10);
+    }
+    if (obj.animPlayingRotVertical) { // Pitch, X-axis
+      rx = Math.sin(time * (obj.animRotVerticalSpeed || 1)) * (obj.animRotVerticalDist || 10);
+    }
+    if (obj.animPlayingRotDepth) { // Roll, Z-axis
+      rz = Math.sin(time * (obj.animRotDepthSpeed || 1)) * (obj.animRotDepthDist || 10);
+    }
+    
+    groupRef.current.position.set(dx, dy, dz);
+    groupRef.current.rotation.set(rx, ry, rz);
+  });
+
+  return <group ref={groupRef}>{children}</group>;
+}
+
 function VirtualCanvasMesh({ data, isSelected, onClick }) {
   const texture = useMemo(() => {
     const img = new Image();
@@ -520,6 +556,24 @@ export default function Draw3D() {
       propertyUpdateTimeoutRef.current = setTimeout(() => {
         saveHistory(strokesRef.current, boxesRef.current, newTexts);
       }, 500);
+    }
+  };
+
+  const updateObjectProperties = (updates) => {
+    if (selection.boxIndices.length > 0) {
+      const idx = selection.boxIndices[0];
+      setBoxes((prev) => {
+        const newBoxes = [...prev];
+        newBoxes[idx] = { ...newBoxes[idx], ...updates };
+        return newBoxes;
+      });
+    } else if (selection.textIndices.length > 0) {
+      const idx = selection.textIndices[0];
+      setTexts((prev) => {
+        const newTexts = [...prev];
+        newTexts[idx] = { ...newTexts[idx], ...updates };
+        return newTexts;
+      });
     }
   };
   const [shapeType, setShapeType] = useState('box');
@@ -1527,7 +1581,7 @@ export default function Draw3D() {
                         setShowVirtualCanvasMenu(false);
                       }}
                       style={{ padding: '0.5rem 1rem', background: showAnimationPanel ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="再生"
+                      title="動き"
                     >
                       <Play size={28} />
                     </button>
@@ -1746,16 +1800,56 @@ export default function Draw3D() {
         const aVert = obj?.animVertical || false;
         const aVertDist = obj?.animVerticalDist || 10;
         const aVertSpeed = obj?.animVerticalSpeed || 1;
+        const aVertPlaying = obj?.animPlayingVertical || false;
         const aHorz = obj?.animHorizontal || false;
         const aHorzDist = obj?.animHorizontalDist || 10;
         const aHorzSpeed = obj?.animHorizontalSpeed || 1;
+        const aHorzPlaying = obj?.animPlayingHorizontal || false;
         const aDepth = obj?.animDepth || false;
         const aDepthDist = obj?.animDepthDist || 10;
         const aDepthSpeed = obj?.animDepthSpeed || 1;
+        const aDepthPlaying = obj?.animPlayingDepth || false;
+
+        const aRotVert = obj?.animRotVertical || false;
+        const aRotVertDist = obj?.animRotVerticalDist || 10;
+        const aRotVertSpeed = obj?.animRotVerticalSpeed || 1;
+        const aRotVertPlaying = obj?.animPlayingRotVertical || false;
+        const aRotHorz = obj?.animRotHorizontal || false;
+        const aRotHorzDist = obj?.animRotHorizontalDist || 10;
+        const aRotHorzSpeed = obj?.animRotHorizontalSpeed || 1;
+        const aRotHorzPlaying = obj?.animPlayingRotHorizontal || false;
+        const aRotDepth = obj?.animRotDepth || false;
+        const aRotDepthDist = obj?.animRotDepthDist || 10;
+        const aRotDepthSpeed = obj?.animRotDepthSpeed || 1;
+        const aRotDepthPlaying = obj?.animPlayingRotDepth || false;
+
+        const anyPlaying = (aVert && aVertPlaying) || (aHorz && aHorzPlaying) || (aDepth && aDepthPlaying) ||
+                           (aRotVert && aRotVertPlaying) || (aRotHorz && aRotHorzPlaying) || (aRotDepth && aRotDepthPlaying);
+        const toggleGlobalPlay = () => {
+          if (anyPlaying) {
+             updateObjectProperties({ animPlayingVertical: false, animPlayingHorizontal: false, animPlayingDepth: false, animPlayingRotVertical: false, animPlayingRotHorizontal: false, animPlayingRotDepth: false });
+          } else {
+             const updates = {};
+             if (aVert) updates.animPlayingVertical = true;
+             if (aHorz) updates.animPlayingHorizontal = true;
+             if (aDepth) updates.animPlayingDepth = true;
+             if (aRotVert) updates.animPlayingRotVertical = true;
+             if (aRotHorz) updates.animPlayingRotHorizontal = true;
+             if (aRotDepth) updates.animPlayingRotDepth = true;
+             updateObjectProperties(updates);
+          }
+        };
 
         return (
-          <div style={{ position: 'absolute', top: '100px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>動きを設定</div>
+          <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>動きを設定</span>
+              {(aVert || aHorz || aDepth || aRotVert || aRotHorz || aRotDepth) && (
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: anyPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={toggleGlobalPlay}>
+                  {anyPlaying ? <Square size={20} fill="#ef4444" /> : <Play size={20} fill="#22c55e" />}
+                </button>
+              )}
+            </div>
             
             {!obj ? (
               <div style={{ color: '#64748b', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
@@ -1764,48 +1858,144 @@ export default function Draw3D() {
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="checkbox" checked={aVert} onChange={(e) => updateObjectProperty('animVertical', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に動く
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aVert} onChange={(e) => updateObjectProperty('animVertical', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に動く
+                    </label>
+                    {aVert && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aVertPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingVertical', !aVertPlaying)}>
+                        {aVertPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
                   {aVert && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aVertDist}</span></label>
-                      <input type="range" min="1" max="50" value={aVertDist} onChange={(e) => updateObjectProperty('animVerticalDist', Number(e.target.value))} />
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aVertSpeed}</span></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aVertDist} onChange={(e) => updateObjectProperty('animVerticalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aVertDist} onChange={(e) => updateObjectProperty('animVerticalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aVertSpeed} onChange={(e) => updateObjectProperty('animVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aVertSpeed} onChange={(e) => updateObjectProperty('animVerticalSpeed', Number(e.target.value))} />
                     </div>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="checkbox" checked={aHorz} onChange={(e) => updateObjectProperty('animHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に動く
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aHorz} onChange={(e) => updateObjectProperty('animHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に動く
+                    </label>
+                    {aHorz && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aHorzPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingHorizontal', !aHorzPlaying)}>
+                        {aHorzPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
                   {aHorz && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aHorzDist}</span></label>
-                      <input type="range" min="1" max="50" value={aHorzDist} onChange={(e) => updateObjectProperty('animHorizontalDist', Number(e.target.value))} />
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aHorzSpeed}</span></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aHorzDist} onChange={(e) => updateObjectProperty('animHorizontalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aHorzDist} onChange={(e) => updateObjectProperty('animHorizontalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aHorzSpeed} onChange={(e) => updateObjectProperty('animHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aHorzSpeed} onChange={(e) => updateObjectProperty('animHorizontalSpeed', Number(e.target.value))} />
                     </div>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="checkbox" checked={aDepth} onChange={(e) => updateObjectProperty('animDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に動く
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aDepth} onChange={(e) => updateObjectProperty('animDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に動く
+                    </label>
+                    {aDepth && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aDepthPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingDepth', !aDepthPlaying)}>
+                        {aDepthPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
                   {aDepth && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>距離: <span>{aDepthDist}</span></label>
-                      <input type="range" min="1" max="50" value={aDepthDist} onChange={(e) => updateObjectProperty('animDepthDist', Number(e.target.value))} />
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>速さ: <span>{aDepthSpeed}</span></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aDepthDist} onChange={(e) => updateObjectProperty('animDepthDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aDepthDist} onChange={(e) => updateObjectProperty('animDepthDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aDepthSpeed} onChange={(e) => updateObjectProperty('animDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aDepthSpeed} onChange={(e) => updateObjectProperty('animDepthSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+                
+                <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>回転</div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aRotVert} onChange={(e) => updateObjectProperty('animRotVertical', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に回転する
+                    </label>
+                    {aRotVert && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aRotVertPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingRotVertical', !aRotVertPlaying)}>
+                        {aRotVertPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aRotVert && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aRotHorz} onChange={(e) => updateObjectProperty('animRotHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に回転する
+                    </label>
+                    {aRotHorz && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aRotHorzPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingRotHorizontal', !aRotHorzPlaying)}>
+                        {aRotHorzPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aRotHorz && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aRotDepth} onChange={(e) => updateObjectProperty('animRotDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に回転する
+                    </label>
+                    {aRotDepth && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aRotDepthPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingRotDepth', !aRotDepthPlaying)}>
+                        {aRotDepthPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aRotDepth && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} />
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} />
                     </div>
                   )}
                 </div>
               </>
             )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAnimationPanel(false);
+                setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+              }}
+              style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+            >
+              設定終了
+            </button>
           </div>
         );
       })()}
@@ -1823,7 +2013,7 @@ export default function Draw3D() {
         const rotXDeg = Math.round(rot[0] * 180 / Math.PI);
 
         return (
-          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+          <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <span>詳細設定</span>
             </div>
@@ -1902,7 +2092,7 @@ export default function Draw3D() {
         const scaleZ = isArray ? scaleVal[2] : (scaleVal || 1);
 
         return (
-          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+          <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <span>大きさ変更</span>
             </div>
@@ -1983,7 +2173,7 @@ export default function Draw3D() {
               }}
               style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
             >
-              完了
+              設定終了
             </button>
           </div>
         );
@@ -1996,7 +2186,7 @@ export default function Draw3D() {
             : null;
 
         return (
-          <div style={{ position: 'absolute', top: '80px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+          <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <span>見た目設定</span>
             </div>
@@ -2026,7 +2216,7 @@ export default function Draw3D() {
               }}
               style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', width: '100%', boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
             >
-              完了
+              設定終了
             </button>
           </div>
         );
@@ -2119,22 +2309,44 @@ export default function Draw3D() {
           {boxes.map((b, index) => {
             const isSelected = selection?.boxIndices.includes(index);
             const type = b.shapeType || 'box';
-            if (type === 'virtualCanvas') {
-              return <VirtualCanvasMesh key={`b-${index}`} data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />;
-            }
-            if (type === 'virtualCanvasCube') {
-              return <VirtualCanvasCubeMesh key={`b-${index}`} data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />;
-            }
             return (
-              <mesh key={`b-${index}`} position={b.position} rotation={b.rotation || [0, 0, 0]} scale={b.scale || 1} onClick={(e) => handleObjectClick(e, 'box', index)}>
-                {type === 'box' && <boxGeometry args={b.size} />}
-                {type === 'sphere' && <sphereGeometry args={[b.size[0] / 2, 32, 32]} />}
-                {type === 'cone' && <coneGeometry args={[b.size[0] / 2, b.size[0], 3]} />}
-                {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
-                {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
-                {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
-                <meshStandardMaterial color={b.color} transparent opacity={b.opacity ?? 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
-              </mesh>
+              <group key={`b-group-${index}`}>
+                <AnimatedWrapper obj={b}>
+                  {type === 'virtualCanvas' ? (
+                    <VirtualCanvasMesh data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />
+                  ) : type === 'virtualCanvasCube' ? (
+                    <VirtualCanvasCubeMesh data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />
+                  ) : (
+                    <mesh position={b.position} rotation={b.rotation || [0, 0, 0]} scale={b.scale || 1} onClick={(e) => handleObjectClick(e, 'box', index)}>
+                      {type === 'box' && <boxGeometry args={b.size} />}
+                      {type === 'sphere' && <sphereGeometry args={[b.size[0] / 2, 32, 32]} />}
+                      {type === 'cone' && <coneGeometry args={[b.size[0] / 2, b.size[0], 3]} />}
+                      {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
+                      {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
+                      {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
+                      <meshStandardMaterial color={b.color} transparent opacity={b.opacity ?? 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
+                    </mesh>
+                  )}
+                </AnimatedWrapper>
+                {isSelected && (b.animVertical || b.animHorizontal || b.animDepth) && (
+                  <Line
+                    points={[
+                      [
+                        b.position[0] - (b.animHorizontal ? (b.animHorizontalDist || 0) : 0),
+                        b.position[1] - (b.animVertical ? (b.animVerticalDist || 0) : 0),
+                        b.position[2] - (b.animDepth ? (b.animDepthDist || 0) : 0)
+                      ],
+                      [
+                        b.position[0] + (b.animHorizontal ? (b.animHorizontalDist || 0) : 0),
+                        b.position[1] + (b.animVertical ? (b.animVerticalDist || 0) : 0),
+                        b.position[2] + (b.animDepth ? (b.animDepthDist || 0) : 0)
+                      ]
+                    ]}
+                    color="#ff7b00"
+                    lineWidth={3}
+                  />
+                )}
+              </group>
             );
           })}
           <ActiveBoxPreview activeBoxRef={activeBoxRef} />
@@ -2143,19 +2355,41 @@ export default function Draw3D() {
           {texts.map((t, index) => {
             const isSelected = selection?.textIndices.includes(index);
             return (
-              <Text
-                key={`t-${index}`}
-                position={t.position}
-                rotation={t.rotation || [0, 0, 0]}
-                scale={t.scale || 1}
-                color={isSelected ? '#ffffff' : t.color}
-                fontSize={t.size}
-                anchorX="center"
-                anchorY="middle"
-                onClick={(e) => handleObjectClick(e, 'text', index)}
-              >
-                {t.text}
-              </Text>
+              <group key={`t-group-${index}`}>
+                <AnimatedWrapper obj={t}>
+                  <Text
+                    key={`t-${index}`}
+                    position={t.position}
+                    rotation={t.rotation || [0, 0, 0]}
+                    scale={t.scale || 1}
+                    color={isSelected ? '#ffffff' : t.color}
+                    fontSize={t.size}
+                    anchorX="center"
+                    anchorY="middle"
+                    onClick={(e) => handleObjectClick(e, 'text', index)}
+                  >
+                    {t.text}
+                  </Text>
+                </AnimatedWrapper>
+                {isSelected && (t.animVertical || t.animHorizontal || t.animDepth) && (
+                  <Line
+                    points={[
+                      [
+                        t.position[0] - (t.animHorizontal ? (t.animHorizontalDist || 0) : 0),
+                        t.position[1] - (t.animVertical ? (t.animVerticalDist || 0) : 0),
+                        t.position[2] - (t.animDepth ? (t.animDepthDist || 0) : 0)
+                      ],
+                      [
+                        t.position[0] + (t.animHorizontal ? (t.animHorizontalDist || 0) : 0),
+                        t.position[1] + (t.animVertical ? (t.animVerticalDist || 0) : 0),
+                        t.position[2] + (t.animDepth ? (t.animDepthDist || 0) : 0)
+                      ]
+                    ]}
+                    color="#ff7b00"
+                    lineWidth={3}
+                  />
+                )}
+              </group>
             );
           })}
 
