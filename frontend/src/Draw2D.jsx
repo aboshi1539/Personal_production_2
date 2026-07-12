@@ -46,7 +46,7 @@ function CustomCursor({ tool, brushColor }) {
         zIndex: 9999,
         transform: 'translate3d(-100px, -100px, 0)',
         marginLeft: tool === 'pen' ? '-2px' : '-12px',
-        marginTop: tool === 'pen' ? '-22px' : '-12px',
+        marginTop: tool === 'pen' ? '-2px' : '-12px',
         transition: 'opacity 0.1s ease-in-out'
       }}
     >
@@ -1113,7 +1113,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
             </div>
           )}
 
-          {(tool === 'pen' || tool === 'eraser') && (
+          {(tool === 'pen' || tool === 'eraser') && !isDrawing && (
             <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
               <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
                 {tool === 'eraser' ? '消しゴムの太さ:' : 'ペンの太さ:'}

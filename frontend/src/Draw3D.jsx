@@ -404,7 +404,7 @@ function CustomCursor({ tool, brushColor }) {
         zIndex: 9999,
         transform: 'translate3d(-100px, -100px, 0)',
         marginLeft: tool === 'pen' ? '-2px' : '-12px',
-        marginTop: tool === 'pen' ? '-22px' : '-12px',
+        marginTop: tool === 'pen' ? '-2px' : '-12px',
         transition: 'opacity 0.1s ease-in-out'
       }}
     >
@@ -566,6 +566,7 @@ export default function Draw3D() {
   const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
 
   const [isDrawingMode, setIsDrawingMode] = useState(true);
+  const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState('camera'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
 
   const [brushColor, setBrushColor] = useState('#000000');
@@ -1039,6 +1040,7 @@ export default function Draw3D() {
   }, [copiedArt, saveHistory]);
 
   const onPointerDown3D = useCallback((pos3D, posNDC) => {
+    setIsDrawing(true);
     if (tool === 'eyedropper') {
       let foundColor = null;
       let minDist = Infinity;
@@ -1257,6 +1259,7 @@ export default function Draw3D() {
   }, [tool, selection, brushColor, eraserSize]);
 
   const onPointerUp3D = useCallback(() => {
+    setIsDrawing(false);
     if (tool === 'pen') {
       if (activeStrokeRef.current && activeStrokeRef.current.points.length > 1) {
         const newStrokes = [...strokesRef.current, activeStrokeRef.current];
@@ -1770,7 +1773,7 @@ export default function Draw3D() {
             </div>
           )}
 
-          {isDrawingMode && (tool === 'pen' || tool === 'eraser' || tool === 'paint') && (
+          {isDrawingMode && !isDrawing && (tool === 'pen' || tool === 'eraser' || tool === 'paint') && (
             <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.9)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexWrap: 'wrap', justifyContent: 'center' }}>
               <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
                 {tool === 'eraser' ? '消しゴムサイズ:' : tool === 'paint' ? 'ブラシの太さ:' : 'ペンの太さ:'}
