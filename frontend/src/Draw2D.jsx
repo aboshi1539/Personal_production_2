@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut } from 'lucide-react';
+import { useNavigate, useBlocker } from 'react-router-dom';
+import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import './index.css';
 
 function CustomCursor({ tool, brushColor, eraserSize, eraserSizeMap, penShape, globalZoom }) {
@@ -907,6 +907,70 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     return true;
   };
 
+  const handleSaveRef = useRef(handleSave);
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+
+  const isDirtyRef = useRef(false);
+  useEffect(() => {
+    isDirtyRef.current = historyIndex > lastSavedIndex;
+  }, [historyIndex, lastSavedIndex]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  useBlocker(({ currentLocation, nextLocation }) => {
+    if (isDirtyRef.current && currentLocation.pathname !== nextLocation.pathname) {
+      return !window.confirm("このサイトを離れますか？ 行った変更が保存されない可能性があります。");
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    handleSaveRef.current = handleSave;
+    undoRef.current = undo;
+    redoRef.current = redo;
+  }, [handleSave, undo, redo]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSaveRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        undoRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        redoRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.key === ';')) {
+        e.preventDefault();
+        setGlobalZoom(prev => Math.min(prev * 1.2, 5));
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        setGlobalZoom(prev => Math.max(prev / 1.2, 0.2));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        setGlobalZoom(1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
       <CustomCursor tool={tool} brushColor={brushColor} eraserSize={eraserSize} eraserSizeMap={eraserSizeMap} penShape={penShape} globalZoom={globalZoom} />
@@ -928,7 +992,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
                   className="start-button" 
-                  title="元に戻す (Undo)"
+                  title="元に戻す (ctrl + z)"
                   onClick={undo} 
                   disabled={historyIndex <= 0}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
@@ -937,7 +1001,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
                 </button>
                 <button 
                   className="start-button" 
-                  title="やり直す (Redo)"
+                  title="やり直す (ctrl + y)"
                   onClick={redo} 
                   disabled={historyIndex >= history.length - 1}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
@@ -987,7 +1051,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               <button
                 className="start-button"
                 onClick={() => setGlobalZoom(prev => Math.max(prev / 1.2, 0.2))}
-                title="ズームアウト"
+                title="ズームアウト (ctrl + -)"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ZoomOut size={28} />

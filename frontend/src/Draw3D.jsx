@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from 'rea
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line, Environment, Grid, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, Video, X, Settings, Maximize, Palette, Play, Pause, Link, Unlink, SquareMousePointer } from 'lucide-react';
+import { useNavigate, useBlocker } from 'react-router-dom';
+import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MousePointer2, Undo2, Redo2, Paintbrush, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Shapes, Triangle, Minus, ZoomIn, ZoomOut, RotateCw, RotateCcw, Download, Upload, Camera, Video, X, Settings, Maximize, Palette, Play, Pause, Link, Unlink, SquareMousePointer, Hand } from 'lucide-react';
 import './index.css';
 import Draw2D from './Draw2D';
 
@@ -1376,6 +1376,18 @@ export default function Draw3D() {
     }
   };
 
+  const handleResetView = () => {
+    if (cameraRef.current) {
+      cameraRef.current.zoom = 1;
+      cameraRef.current.position.set(0, 5, 20);
+      cameraRef.current.updateProjectionMatrix();
+    }
+    if (controlsRef.current) {
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
+    }
+  };
+
   const handleSaveData = async () => {
     const data = {
       strokes: strokesRef.current,
@@ -1439,6 +1451,76 @@ export default function Draw3D() {
     e.target.value = '';
   };
 
+  const handleSaveDataRef = useRef(handleSaveData);
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  const handleZoomInRef = useRef(handleZoomIn);
+  const handleZoomOutRef = useRef(handleZoomOut);
+  const handleResetViewRef = useRef(handleResetView);
+
+  const isDirtyRef = useRef(false);
+  useEffect(() => {
+    isDirtyRef.current = historyIndex > lastSavedIndex;
+  }, [historyIndex, lastSavedIndex]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  useBlocker(({ currentLocation, nextLocation }) => {
+    if (isDirtyRef.current && currentLocation.pathname !== nextLocation.pathname) {
+      return !window.confirm("このサイトを離れますか？ 行った変更が保存されない可能性があります。");
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    handleSaveDataRef.current = handleSaveData;
+    undoRef.current = undo;
+    redoRef.current = redo;
+    handleZoomInRef.current = handleZoomIn;
+    handleZoomOutRef.current = handleZoomOut;
+    handleResetViewRef.current = handleResetView;
+  }, [handleSaveData, undo, redo, handleZoomIn, handleZoomOut, handleResetView]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSaveDataRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        undoRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        redoRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.key === ';')) {
+        e.preventDefault();
+        handleZoomInRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        handleZoomOutRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        handleResetViewRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <CustomCursor tool={tool} brushColor={brushColor} />
@@ -1491,7 +1573,7 @@ export default function Draw3D() {
               <button
                 className="start-button"
                 onClick={handleZoomIn}
-                title="ズームイン"
+                title="ズームイン (ctrl + +)"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ZoomIn size={28} />
@@ -1499,7 +1581,7 @@ export default function Draw3D() {
               <button
                 className="start-button"
                 onClick={handleZoomOut}
-                title="ズームアウト"
+                title="ズームアウト (ctrl + -)"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ZoomOut size={28} />
@@ -1587,7 +1669,8 @@ export default function Draw3D() {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', marginBottom: '2px' }}>視点</span>
                   <div style={{ display: 'flex', gap: '0.2rem' }}>
-                    <button onClick={() => handleToolChange('camera')} title="視点移動" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={28} /></button>
+                    <button onClick={() => handleToolChange('camera')} title="視点回転" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={28} /></button>
+                    <button onClick={() => handleToolChange('pan')} title="視点平行移動" style={{ padding: '0.5rem 1rem', background: tool === 'pan' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Hand size={28} /></button>
                   </div>
                 </div>
 
@@ -1633,7 +1716,16 @@ export default function Draw3D() {
                         setShowAppearancePanel(false);
                         setShowAnimationPanel(false);
                         setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
-                      }} title="視点移動" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={28} /></button>
+                      }} title="視点回転" style={{ padding: '0.5rem 1rem', background: tool === 'camera' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Move3d size={28} /></button>
+                    <button onClick={() => {
+                        handleToolChange('pan');
+                        setShowVirtualCanvasMenu(false);
+                        setShowPropertyPanel(false);
+                        setShowResizePanel(false);
+                        setShowAppearancePanel(false);
+                        setShowAnimationPanel(false);
+                        setSelection({ strokeIndices: [], boxIndices: [], textIndices: [] });
+                      }} title="視点平行移動" style={{ padding: '0.5rem 1rem', background: tool === 'pan' ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Hand size={28} /></button>
                   </div>
                 </div>
 
@@ -2358,6 +2450,7 @@ export default function Draw3D() {
                : showPropertyPanel ? '図形を選択して座標や角度を細かく設定できます'
                : showResizePanel ? '図形を選択して大きさを変更できます'
                : showAppearancePanel ? '図形を選択して透明度などを設定できます'
+               : tool === 'pan' ? 'ドラッグしてカメラを平行移動できます'
                : 'ドラッグしてカメラを回転・移動できます')
             : tool === 'pen' ? 'ドラッグして空間に絵を描けます'
               : tool === 'shape' ? 'ドラッグして図形を配置できます'
@@ -2369,12 +2462,13 @@ export default function Draw3D() {
                           : tool === 'text' ? 'クリックした場所にテキストを配置します'
                             : tool === 'fill' ? '描いた線の内側をクリックして塗りつぶします（ひと筆書き用）'
                               : tool === 'camera' ? 'ドラッグしてカメラを回転・移動できます'
-                                : 'ドラッグしてカメラを回転・移動できます'}
+                                : tool === 'pan' ? 'ドラッグしてカメラを平行移動できます'
+                                  : 'ドラッグしてカメラを回転・移動できます'}
         </div>
       )}
 
       <Canvas 
-        style={{ cursor: ['pen', 'eraser', 'paint', 'fill', 'stamp', 'shape'].includes(tool) ? 'none' : 'auto' }}
+        style={{ cursor: ['pen', 'eraser', 'paint', 'fill', 'stamp', 'shape'].includes(tool) ? 'none' : (tool === 'pan' ? 'grab' : 'auto') }}
         onCreated={({ camera }) => { cameraRef.current = camera; }} 
         camera={{ position: [0, 5, 20], fov: 50 }}
       >
@@ -2383,7 +2477,7 @@ export default function Draw3D() {
           <directionalLight position={[10, 10, 5]} intensity={1} />
 
         <DrawingController
-          isActive={isDrawingMode && tool !== 'camera'}
+          isActive={isDrawingMode && tool !== 'camera' && tool !== 'pan'}
           tool={tool}
           distance={distance}
           setDistance={setDistance}
@@ -2561,9 +2655,14 @@ export default function Draw3D() {
         </Suspense>
         <OrbitControls
           ref={controlsRef}
-          enabled={!isDrawingMode || tool === 'camera'}
+          enabled={!isDrawingMode || tool === 'camera' || tool === 'pan'}
           enableDamping
           dampingFactor={0.05}
+          mouseButtons={{
+            LEFT: tool === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
+          }}
         />
       </Canvas>
       {showVirtualCanvas && (
