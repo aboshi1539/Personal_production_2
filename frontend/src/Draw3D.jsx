@@ -17,23 +17,35 @@ function AnimatedWrapper({ obj, children }) {
     let rx = 0, ry = 0, rz = 0;
     
     if (obj.animPlayingHorizontal) {
-      dx = Math.sin(time * (obj.animHorizontalSpeed || 1)) * (obj.animHorizontalDist || 10);
+      const speed = obj.animHorizontalSpeed || 1;
+      const dist = obj.animHorizontalDist || 10;
+      dx = Math.sin(time * speed / dist) * dist;
     }
     if (obj.animPlayingVertical) {
-      dy = Math.sin(time * (obj.animVerticalSpeed || 1)) * (obj.animVerticalDist || 10);
+      const speed = obj.animVerticalSpeed || 1;
+      const dist = obj.animVerticalDist || 10;
+      dy = Math.sin(time * speed / dist) * dist;
     }
     if (obj.animPlayingDepth) {
-      dz = Math.sin(time * (obj.animDepthSpeed || 1)) * (obj.animDepthDist || 10);
+      const speed = obj.animDepthSpeed || 1;
+      const dist = obj.animDepthDist || 10;
+      dz = Math.sin(time * speed / dist) * dist;
     }
 
     if (obj.animPlayingRotHorizontal) { // Yaw, Y-axis
-      ry = Math.sin(time * (obj.animRotHorizontalSpeed || 1)) * (obj.animRotHorizontalDist || 10);
+      const speed = obj.animRotHorizontalSpeed || 1;
+      const dist = obj.animRotHorizontalDist || 10;
+      ry = Math.sin(time * speed / dist) * dist;
     }
     if (obj.animPlayingRotVertical) { // Pitch, X-axis
-      rx = Math.sin(time * (obj.animRotVerticalSpeed || 1)) * (obj.animRotVerticalDist || 10);
+      const speed = obj.animRotVerticalSpeed || 1;
+      const dist = obj.animRotVerticalDist || 10;
+      rx = Math.sin(time * speed / dist) * dist;
     }
     if (obj.animPlayingRotDepth) { // Roll, Z-axis
-      rz = Math.sin(time * (obj.animRotDepthSpeed || 1)) * (obj.animRotDepthDist || 10);
+      const speed = obj.animRotDepthSpeed || 1;
+      const dist = obj.animRotDepthDist || 10;
+      rz = Math.sin(time * speed / dist) * dist;
     }
     
     groupRef.current.position.set(dx, dy, dz);
@@ -55,7 +67,7 @@ function VirtualCanvasMesh({ data, isSelected, onClick }) {
   return (
     <mesh position={data.position} rotation={data.rotation || [0, 0, 0]} scale={data.scale || 1} onClick={onClick}>
       <planeGeometry args={[data.size[0], data.size[1]]} />
-      <meshStandardMaterial map={texture} transparent opacity={data.opacity ?? 1.0} side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
+      <meshStandardMaterial map={texture} transparent opacity={data.opacity ?? 1.0} depthWrite={(data.opacity ?? 1.0) >= 1.0} side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
     </mesh>
   );
 }
@@ -71,6 +83,7 @@ function VirtualCanvasCubeMesh({ data, isSelected, onClick }) {
         map: tex,
         transparent: true,
         opacity: data.opacity ?? 1.0,
+        depthWrite: (data.opacity ?? 1.0) >= 1.0,
         emissive: isSelected ? '#ffffff' : '#000000',
         emissiveIntensity: isSelected ? 0.4 : 0,
         alphaTest: 0.01
@@ -110,7 +123,7 @@ function BrushPreview({ tool, brushColor, eraserSize, previewPosRef, eraserRadiu
   return (
     <mesh ref={meshRef} position={[0,0,0]}>
       <sphereGeometry args={[eraserRadiusMap[eraserSize], 16, 16]} />
-      <meshBasicMaterial color={tool === 'eraser' ? '#ff0000' : brushColor} transparent opacity={0.6} wireframe={true} />
+      <meshBasicMaterial color={tool === 'eraser' ? '#000000' : brushColor} transparent opacity={tool === 'eraser' ? 0.3 : 0.6} wireframe={true} />
     </mesh>
   );
 }
@@ -144,7 +157,7 @@ function ActiveStampPreview({ tool, isDrawingMode, copiedArt, previewPosRef }) {
             {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
             {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
             {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
-            <meshStandardMaterial color={b.color} transparent opacity={0.4} roughness={0.3} metalness={0.2} />
+            <meshStandardMaterial color={b.color} transparent opacity={0.4} depthWrite={false} roughness={0.3} metalness={0.2} />
           </mesh>
         );
       })}
@@ -231,7 +244,7 @@ function ActiveBoxPreview({ activeBoxRef }) {
       {boxConfig.shapeType === 'cylinder' && <cylinderGeometry args={[0.5, 0.5, 1, 32]} />}
       {boxConfig.shapeType === 'prism3' && <cylinderGeometry args={[0.5, 0.5, 1, 3]} />}
       {boxConfig.shapeType === 'prism4' && <cylinderGeometry args={[0.5, 0.5, 1, 4]} />}
-      <meshStandardMaterial color={boxConfig.color} transparent opacity={0.5} roughness={0.3} wireframe />
+      <meshStandardMaterial color={boxConfig.color} transparent opacity={0.5} depthWrite={false} roughness={0.3} wireframe />
     </mesh>
   );
 }
@@ -585,6 +598,7 @@ export default function Draw3D() {
   };
 
   const handleObjectClick = (e, type, index) => {
+    e.stopPropagation();
     if (showPropertyPanel || showResizePanel || showAppearancePanel || showAnimationPanel) {
       let targetObj;
       if (type === 'box') {
@@ -1362,12 +1376,7 @@ export default function Draw3D() {
     }
   };
 
-  const handleSaveData = () => {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const defaultName = `3d-drawing-${timestamp}`;
-    const fileName = window.prompt("保存するファイル名を入力してください", defaultName);
-    if (!fileName) return;
-
+  const handleSaveData = async () => {
     const data = {
       strokes: strokesRef.current,
       boxes: boxesRef.current,
@@ -1375,14 +1384,40 @@ export default function Draw3D() {
     };
     const json = JSON.stringify(data);
     const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-    setLastSavedIndex(historyIndex);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `3d-drawing-${timestamp}.json`,
+          types: [{
+            description: 'JSON File',
+            accept: { 'application/json': ['.json'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        setLastSavedIndex(historyIndex);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        }
+      }
+    } else {
+      const defaultName = `3d-drawing-${timestamp}`;
+      const fileName = window.prompt("保存するファイル名を入力してください", defaultName);
+      if (!fileName) return;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+      setLastSavedIndex(historyIndex);
+    }
   };
 
   const handleLoadData = (e) => {
@@ -1424,7 +1459,7 @@ export default function Draw3D() {
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   className="start-button"
-                  title="元に戻す (Undo)"
+                  title="元に戻す (ctrl + z)"
                   onClick={undo}
                   disabled={historyIndex === 0}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex === 0 ? 0.5 : 1, cursor: historyIndex === 0 ? 'not-allowed' : 'pointer' }}
@@ -1433,7 +1468,7 @@ export default function Draw3D() {
                 </button>
                 <button
                   className="start-button"
-                  title="やり直す (Redo)"
+                  title="やり直す (ctrl + y)"
                   onClick={redo}
                   disabled={historyIndex >= history.length - 1}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
@@ -1488,16 +1523,16 @@ export default function Draw3D() {
       </div>
 
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <button title="保存" onClick={handleSaveData} style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <Download size={24} />
-            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>保存</span>
-          </button>
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'row', gap: '0.5rem' }}>
           <label title="読み込み" style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <Upload size={24} />
             <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>読み込み</span>
             <input type="file" accept=".json" onChange={handleLoadData} style={{ display: 'none' }} />
           </label>
+          <button title="保存" onClick={handleSaveData} style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Download size={24} />
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>保存</span>
+          </button>
         </div>
       )}
 
@@ -2430,7 +2465,7 @@ export default function Draw3D() {
                       {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
                       {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
                       {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
-                      <meshStandardMaterial color={b.color} transparent opacity={b.opacity ?? 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
+                      <meshStandardMaterial color={b.color} transparent={(b.opacity ?? 1.0) < 1.0} opacity={b.opacity ?? 1.0} depthWrite={(b.opacity ?? 1.0) >= 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
                     </mesh>
                   )}
                 </AnimatedWrapper>
