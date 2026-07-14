@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut } from 'lucide-react';
+import { useNavigate, useBlocker } from 'react-router-dom';
+import { Home as HomeIcon, Trash2, PenTool, Eraser, Undo2, Redo2, MousePointer2, Copy, FlipHorizontal, FlipVertical, Pipette, Type, Eye, EyeOff, PaintBucket, Circle, Square, Shapes, Triangle, Pentagon, Minus, RotateCw, Download, Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import './index.css';
 
-function CustomCursor({ tool, brushColor }) {
+function CustomCursor({ tool, brushColor, eraserSize, eraserSizeMap, penShape, globalZoom }) {
   const cursorRef = useRef(null);
 
   useEffect(() => {
@@ -50,6 +50,19 @@ function CustomCursor({ tool, brushColor }) {
         transition: 'opacity 0.1s ease-in-out'
       }}
     >
+      {tool === 'eraser' && eraserSizeMap && (
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          transform: 'translate(-50%, -50%)',
+          width: `${eraserSizeMap[eraserSize] * (globalZoom || 1)}px`,
+          height: `${eraserSizeMap[eraserSize] * (globalZoom || 1)}px`,
+          borderRadius: penShape === 'round' ? '50%' : '0%',
+          border: '1px solid rgba(0,0,0,0.5)',
+          boxSizing: 'border-box'
+        }} />
+      )}
       {icon}
     </div>
   );
@@ -73,8 +86,8 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyIndexRef = useRef(0);
   const [lastSavedIndex, setLastSavedIndex] = useState(0);
-  const [showConfirmHome, setShowConfirmHome] = useState(false);
   const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
   const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
   const [globalZoom, setGlobalZoom] = useState(1);
@@ -734,12 +747,9 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     saveHistory();
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (selection) commitSelection();
     if (!canvasRef.current) return;
-
-    const filename = window.prompt("保存するファイル名を入力してください", "drawing");
-    if (!filename) return;
 
     const canvas = canvasRef.current;
     const tempCanvas = document.createElement('canvas');
@@ -751,13 +761,37 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
     ctx.drawImage(canvas, 0, 0);
 
-    const dataUrl = tempCanvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = filename.endsWith('.png') || filename.endsWith('.jpeg') || filename.endsWith('.jpg') ? filename : `${filename}.png`;
-    link.href = dataUrl;
-    link.click();
-    
-    setLastSavedIndex(selection ? historyIndex + 1 : historyIndex);
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'drawing.png',
+          types: [{
+            description: 'PNG Image',
+            accept: { 'image/png': ['.png'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
+        await writable.write(blob);
+        await writable.close();
+        setLastSavedIndex(selection ? historyIndex + 1 : historyIndex);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        }
+      }
+    } else {
+      const filename = window.prompt("保存するファイル名を入力してください", "drawing");
+      if (!filename) return;
+
+      const dataUrl = tempCanvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = filename.endsWith('.png') || filename.endsWith('.jpeg') || filename.endsWith('.jpg') ? filename : `${filename}.png`;
+      link.href = dataUrl;
+      link.click();
+      
+      setLastSavedIndex(selection ? historyIndex + 1 : historyIndex);
+    }
   };
 
   const handleUpload = (e) => {
@@ -873,28 +907,74 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
     return true;
   };
 
+  const handleSaveRef = useRef(handleSave);
+
+  const isDirtyRef = useRef(false);
+  useEffect(() => {
+    isDirtyRef.current = historyIndex > lastSavedIndex;
+  }, [historyIndex, lastSavedIndex]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  useBlocker(({ currentLocation, nextLocation }) => {
+    if (isDirtyRef.current && currentLocation.pathname !== nextLocation.pathname) {
+      return !window.confirm("このサイトを離れますか？ 行った変更が保存されない可能性があります。");
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    handleSaveRef.current = handleSave;
+  }, [handleSave]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSaveRef.current();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.key === ';')) {
+        e.preventDefault();
+        setGlobalZoom(prev => Math.min(prev * 1.2, 5));
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        setGlobalZoom(prev => Math.max(prev / 1.2, 0.2));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        setGlobalZoom(1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#f1f5f9' }}>
-      <CustomCursor tool={tool} brushColor={brushColor} />
+      <CustomCursor tool={tool} brushColor={brushColor} eraserSize={eraserSize} eraserSizeMap={eraserSizeMap} penShape={penShape} globalZoom={globalZoom} />
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {showUI ? (
           <>
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
               {!isVirtualCanvas && (
-                <button className="start-button inverted" title="ホームに戻る" onClick={() => {
-                  if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
-                    setShowConfirmHome(true);
-                  } else {
-                    navigate('/');
-                  }
-                }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button className="start-button inverted" title="ホームに戻る" onClick={() => navigate('/')} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <HomeIcon size={28} />
                 </button>
               )}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
                   className="start-button" 
-                  title="元に戻す (Undo)"
+                  title="元に戻す (ctrl + z)"
                   onClick={undo} 
                   disabled={historyIndex <= 0}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex <= 0 ? 0.5 : 1, cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer' }}
@@ -903,7 +983,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
                 </button>
                 <button 
                   className="start-button" 
-                  title="やり直す (Redo)"
+                  title="やり直す (ctrl + y)"
                   onClick={redo} 
                   disabled={historyIndex >= history.length - 1}
                   style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: historyIndex >= history.length - 1 ? 0.5 : 1, cursor: historyIndex >= history.length - 1 ? 'not-allowed' : 'pointer' }}
@@ -953,7 +1033,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
               <button
                 className="start-button"
                 onClick={() => setGlobalZoom(prev => Math.max(prev / 1.2, 0.2))}
-                title="ズームアウト"
+                title="ズームアウト (ctrl + -)"
                 style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <ZoomOut size={28} />
@@ -1228,16 +1308,16 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
       {/* 4. 保存＆読み込みボタン (右上) */}
       {showUI && (
-        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <button title="保存" onClick={handleSave} style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <Download size={24} />
-            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>保存</span>
-          </button>
+        <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'row', gap: '0.5rem' }}>
           <label title="読み込み" style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <Upload size={24} />
             <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>読み込み</span>
             <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
           </label>
+          <button title="保存" onClick={handleSave} style={{ padding: '0.5rem 0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Download size={24} />
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>保存</span>
+          </button>
         </div>
       )}
 
@@ -1385,30 +1465,6 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
         />
       </div>
 
-      {showConfirmHome && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
-            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
-              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button 
-                onClick={() => navigate('/')}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
-              >
-                はい
-              </button>
-              <button 
-                onClick={() => setShowConfirmHome(false)}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
-              >
-                いいえ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showVirtualCompleteConfirm && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
