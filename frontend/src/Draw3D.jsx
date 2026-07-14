@@ -2502,7 +2502,7 @@ export default function Draw3D() {
             : null;
 
         return (
-          <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
+          <div className="responsive-ui-panel" style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <span>見た目設定</span>
             </div>
