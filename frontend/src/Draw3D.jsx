@@ -45,19 +45,31 @@ function AnimatedWrapper({ obj, isPaused, children }) {
     if (obj.animPlayingRotHorizontal) { // Yaw, Y-axis
       const speed = obj.animRotHorizontalSpeed || 1;
       const dist = obj.animRotHorizontalDist || 10;
-      ry = time * speed;
+      if (obj.animRotHorizontalLimitEnabled) {
+        ry = Math.sin(time * speed) * ((obj.animRotHorizontalLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        ry = time * speed;
+      }
       ox += dist;
     }
     if (obj.animPlayingRotVertical) { // Pitch, X-axis
       const speed = obj.animRotVerticalSpeed || 1;
       const dist = obj.animRotVerticalDist || 10;
-      rx = time * speed;
+      if (obj.animRotVerticalLimitEnabled) {
+        rx = Math.sin(time * speed) * ((obj.animRotVerticalLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        rx = time * speed;
+      }
       oz += dist;
     }
     if (obj.animPlayingRotDepth) { // Roll, Z-axis
       const speed = obj.animRotDepthSpeed || 1;
       const dist = obj.animRotDepthDist || 10;
-      rz = time * speed;
+      if (obj.animRotDepthLimitEnabled) {
+        rz = Math.sin(time * speed) * ((obj.animRotDepthLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        rz = time * speed;
+      }
       ox += dist;
     }
     
@@ -72,13 +84,25 @@ function AnimatedWrapper({ obj, isPaused, children }) {
     if (spinRef.current) {
       let srx = 0, sry = 0, srz = 0;
       if (obj.animPlayingSpinHorizontal) {
-        sry = time * (obj.animSpinHorizontalSpeed || 1);
+        if (obj.animSpinHorizontalLimitEnabled) {
+          sry = Math.sin(time * (obj.animSpinHorizontalSpeed || 1)) * ((obj.animSpinHorizontalLimitAngle ?? 45) * Math.PI / 180);
+        } else {
+          sry = time * (obj.animSpinHorizontalSpeed || 1);
+        }
       }
       if (obj.animPlayingSpinVertical) {
-        srx = time * (obj.animSpinVerticalSpeed || 1);
+        if (obj.animSpinVerticalLimitEnabled) {
+          srx = Math.sin(time * (obj.animSpinVerticalSpeed || 1)) * ((obj.animSpinVerticalLimitAngle ?? 45) * Math.PI / 180);
+        } else {
+          srx = time * (obj.animSpinVerticalSpeed || 1);
+        }
       }
       if (obj.animPlayingSpinDepth) {
-        srz = time * (obj.animSpinDepthSpeed || 1);
+        if (obj.animSpinDepthLimitEnabled) {
+          srz = Math.sin(time * (obj.animSpinDepthSpeed || 1)) * ((obj.animSpinDepthLimitAngle ?? 45) * Math.PI / 180);
+        } else {
+          srz = time * (obj.animSpinDepthSpeed || 1);
+        }
       }
       spinRef.current.rotation.set(srx, sry, srz);
     }
@@ -110,7 +134,7 @@ function VirtualCanvasMesh({ data, isSelected, onClick }) {
   return (
     <mesh position={data.position} rotation={data.rotation || [0, 0, 0]} scale={data.scale || 1} onClick={onClick}>
       <planeGeometry args={[data.size[0], data.size[1]]} />
-      <meshStandardMaterial map={texture} transparent opacity={data.opacity ?? 1.0} depthWrite={(data.opacity ?? 1.0) >= 1.0} side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
+      <meshStandardMaterial map={texture} transparent={(data.opacity ?? 1.0) < 1.0} opacity={data.opacity ?? 1.0} depthWrite={(data.opacity ?? 1.0) >= 1.0} side={THREE.DoubleSide} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} alphaTest={0.01} />
     </mesh>
   );
 }
@@ -124,7 +148,7 @@ function VirtualCanvasCubeMesh({ data, isSelected, onClick }) {
       img.onload = () => tex.needsUpdate = true;
       return new THREE.MeshStandardMaterial({
         map: tex,
-        transparent: true,
+        transparent: (data.opacity ?? 1.0) < 1.0,
         opacity: data.opacity ?? 1.0,
         depthWrite: (data.opacity ?? 1.0) >= 1.0,
         emissive: isSelected ? '#ffffff' : '#000000',
@@ -149,15 +173,30 @@ function generateCompoundOrbitPoints(obj, pos, segments = 800) {
     let ox = 0, oy = 0, oz = 0;
     let rx = 0, ry = 0, rz = 0;
     if (obj.animRotHorizontal) {
-      ry = time * (obj.animRotHorizontalSpeed || 1);
+      const speed = obj.animRotHorizontalSpeed || 1;
+      if (obj.animRotHorizontalLimitEnabled) {
+        ry = Math.sin(time * speed) * ((obj.animRotHorizontalLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        ry = time * speed;
+      }
       ox += (obj.animRotHorizontalDist || 10);
     }
     if (obj.animRotVertical) {
-      rx = time * (obj.animRotVerticalSpeed || 1);
+      const speed = obj.animRotVerticalSpeed || 1;
+      if (obj.animRotVerticalLimitEnabled) {
+        rx = Math.sin(time * speed) * ((obj.animRotVerticalLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        rx = time * speed;
+      }
       oz += (obj.animRotVerticalDist || 10);
     }
     if (obj.animRotDepth) {
-      rz = time * (obj.animRotDepthSpeed || 1);
+      const speed = obj.animRotDepthSpeed || 1;
+      if (obj.animRotDepthLimitEnabled) {
+        rz = Math.sin(time * speed) * ((obj.animRotDepthLimitAngle ?? 45) * Math.PI / 180);
+      } else {
+        rz = time * speed;
+      }
       ox += (obj.animRotDepthDist || 10);
     }
     const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
@@ -507,6 +546,11 @@ export default function Draw3D() {
   const textsRef = useRef([]);
   const controlsRef = useRef(null);
 
+  const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
+  const selectionRef = useRef(selection);
+  useEffect(() => { selectionRef.current = selection; }, [selection]);
+  const clipboardRef = useRef({ strokes: [], boxes: [], texts: [] });
+
   const handleResetCamera = () => {
     if (controlsRef.current) {
       controlsRef.current.reset();
@@ -635,6 +679,62 @@ export default function Draw3D() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        const sel = selectionRef.current;
+        clipboardRef.current = {
+          strokes: sel.strokeIndices.map(idx => JSON.parse(JSON.stringify(strokesRef.current[idx]))),
+          boxes: sel.boxIndices.map(idx => JSON.parse(JSON.stringify(boxesRef.current[idx]))),
+          texts: sel.textIndices.map(idx => JSON.parse(JSON.stringify(textsRef.current[idx])))
+        };
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        const clip = clipboardRef.current;
+        if (clip.strokes.length === 0 && clip.boxes.length === 0 && clip.texts.length === 0) return;
+        
+        const groupMap = {};
+        const getNewGroupId = (oldId) => {
+           if (!oldId) return undefined;
+           if (!groupMap[oldId]) groupMap[oldId] = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+           return groupMap[oldId];
+        };
+
+        const newStrokes = clip.strokes.map(s => {
+           const ns = JSON.parse(JSON.stringify(s));
+           ns.points = ns.points.map(p => [p[0] + 3, p[1] + 3, p[2] + 3]);
+           if (ns.groupId) ns.groupId = getNewGroupId(ns.groupId);
+           return ns;
+        });
+
+        const newBoxes = clip.boxes.map(b => {
+           const nb = JSON.parse(JSON.stringify(b));
+           nb.position = [nb.position[0] + 3, nb.position[1] + 3, nb.position[2] + 3];
+           if (nb.groupId) nb.groupId = getNewGroupId(nb.groupId);
+           return nb;
+        });
+
+        const newTexts = clip.texts.map(t => {
+           const nt = JSON.parse(JSON.stringify(t));
+           nt.position = [nt.position[0] + 3, nt.position[1] + 3, nt.position[2] + 3];
+           if (nt.groupId) nt.groupId = getNewGroupId(nt.groupId);
+           return nt;
+        });
+
+        const nextStrokes = [...strokesRef.current, ...newStrokes];
+        const nextBoxes = [...boxesRef.current, ...newBoxes];
+        const nextTexts = [...textsRef.current, ...newTexts];
+
+        setStrokes(nextStrokes);
+        setBoxes(nextBoxes);
+        setTexts(nextTexts);
+
+        setSelection({
+          strokeIndices: newStrokes.map((_, i) => strokesRef.current.length + i),
+          boxIndices: newBoxes.map((_, i) => boxesRef.current.length + i),
+          textIndices: newTexts.map((_, i) => textsRef.current.length + i)
+        });
+        
+        setTimeout(() => saveHistory(nextStrokes, nextBoxes, nextTexts), 0);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -644,8 +744,6 @@ export default function Draw3D() {
   const activeStrokeRef = useRef(null);
   const activeBoxRef = useRef(null);
   const activeLassoRef = useRef(null);
-
-  const [selection, setSelection] = useState({ strokeIndices: [], boxIndices: [], textIndices: [] });
 
   const [isDrawingMode, setIsDrawingMode] = useState(true);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -2224,6 +2322,16 @@ export default function Draw3D() {
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animRotVerticalLimitEnabled || false} onChange={(e) => updateObjectProperty('animRotVerticalLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animRotVerticalLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animRotVerticalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotVerticalLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animRotVerticalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotVerticalLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2245,6 +2353,16 @@ export default function Draw3D() {
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animRotHorizontalLimitEnabled || false} onChange={(e) => updateObjectProperty('animRotHorizontalLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animRotHorizontalLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animRotHorizontalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotHorizontalLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animRotHorizontalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotHorizontalLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2266,6 +2384,16 @@ export default function Draw3D() {
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animRotDepthLimitEnabled || false} onChange={(e) => updateObjectProperty('animRotDepthLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animRotDepthLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animRotDepthLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotDepthLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animRotDepthLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animRotDepthLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2287,6 +2415,16 @@ export default function Draw3D() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinVertSpeed} onChange={(e) => updateObjectProperty('animSpinVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="-5" max="5" step="0.1" value={aSpinVertSpeed} onChange={(e) => updateObjectProperty('animSpinVerticalSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animSpinVerticalLimitEnabled || false} onChange={(e) => updateObjectProperty('animSpinVerticalLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animSpinVerticalLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animSpinVerticalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinVerticalLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animSpinVerticalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinVerticalLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2306,6 +2444,16 @@ export default function Draw3D() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinHorzSpeed} onChange={(e) => updateObjectProperty('animSpinHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="-5" max="5" step="0.1" value={aSpinHorzSpeed} onChange={(e) => updateObjectProperty('animSpinHorizontalSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animSpinHorizontalLimitEnabled || false} onChange={(e) => updateObjectProperty('animSpinHorizontalLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animSpinHorizontalLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animSpinHorizontalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinHorizontalLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animSpinHorizontalLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinHorizontalLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2325,6 +2473,16 @@ export default function Draw3D() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinDepthSpeed} onChange={(e) => updateObjectProperty('animSpinDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="-5" max="5" step="0.1" value={aSpinDepthSpeed} onChange={(e) => updateObjectProperty('animSpinDepthSpeed', Number(e.target.value))} />
+                    
+                      <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input type="checkbox" checked={obj.animSpinDepthLimitEnabled || false} onChange={(e) => updateObjectProperty('animSpinDepthLimitEnabled', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 角度制限
+                      </label>
+                      {obj.animSpinDepthLimitEnabled && (
+                        <>
+                          <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>度数: <input type="number" min="1" max="360" step="1" value={obj.animSpinDepthLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinDepthLimitAngle', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                          <input type="range" min="1" max="360" step="1" value={obj.animSpinDepthLimitAngle ?? 45} onChange={(e) => updateObjectProperty('animSpinDepthLimitAngle', Number(e.target.value))} />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2355,6 +2513,7 @@ export default function Draw3D() {
         const scale = obj?.scale || 1;
         const rotYDeg = Math.round(rot[1] * 180 / Math.PI);
         const rotXDeg = Math.round(rot[0] * 180 / Math.PI);
+        const rotZDeg = Math.round(rot[2] * 180 / Math.PI);
 
         return (
           <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 20, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.95)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', width: '260px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
@@ -2405,6 +2564,17 @@ export default function Draw3D() {
                     </div>
                   </div>
                   <input type="range" min="-180" max="180" value={rotXDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 0)} style={{ width: '100%' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>奥行きへの角度 (Z軸)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" value={rotZDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 2)} style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>°</span>
+                    </div>
+                  </div>
+                  <input type="range" min="-180" max="180" value={rotZDeg} onChange={(e) => updateObjectProperty('rotation', parseFloat(e.target.value) * Math.PI / 180, 2)} style={{ width: '100%' }} />
                 </div>
               </>
             )}
@@ -2686,7 +2856,7 @@ export default function Draw3D() {
                       {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
                       {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
                       {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
-                      <meshStandardMaterial color={b.color} transparent={true} opacity={b.opacity ?? 1.0} depthWrite={(b.opacity ?? 1.0) >= 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} wireframe={b.wireframe || false} />
+                      <meshStandardMaterial color={b.color} transparent={(b.opacity ?? 1.0) < 1.0} opacity={b.opacity ?? 1.0} depthWrite={(b.opacity ?? 1.0) >= 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} wireframe={b.wireframe || false} />
                     </mesh>
                   )}
                 </AnimatedWrapper>
