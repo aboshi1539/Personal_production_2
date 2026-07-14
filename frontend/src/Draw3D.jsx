@@ -7,12 +7,20 @@ import { Home as HomeIcon, Trash2, Move3d, PenTool, Square, Copy, Eraser, MouseP
 import './index.css';
 import Draw2D from './Draw2D';
 
-function AnimatedWrapper({ obj, children }) {
+function AnimatedWrapper({ obj, isPaused, children }) {
   const groupRef = useRef();
+  const spinRef = useRef();
+  const orbitOffsetRef = useRef();
   
-  useFrame((state) => {
+  const accumulatedTimeRef = useRef(0);
+  
+  useFrame((state, delta) => {
     if (!groupRef.current || !obj) return;
-    const time = state.clock.getElapsedTime();
+    
+    if (!isPaused) {
+      accumulatedTimeRef.current += delta;
+    }
+    const time = accumulatedTimeRef.current;
     let dx = 0, dy = 0, dz = 0;
     let rx = 0, ry = 0, rz = 0;
     
@@ -32,27 +40,61 @@ function AnimatedWrapper({ obj, children }) {
       dz = Math.sin(time * speed / dist) * dist;
     }
 
+    let ox = 0, oy = 0, oz = 0;
+
     if (obj.animPlayingRotHorizontal) { // Yaw, Y-axis
       const speed = obj.animRotHorizontalSpeed || 1;
       const dist = obj.animRotHorizontalDist || 10;
-      ry = Math.sin(time * speed / dist) * dist;
+      ry = time * speed;
+      ox += dist;
     }
     if (obj.animPlayingRotVertical) { // Pitch, X-axis
       const speed = obj.animRotVerticalSpeed || 1;
       const dist = obj.animRotVerticalDist || 10;
-      rx = Math.sin(time * speed / dist) * dist;
+      rx = time * speed;
+      oz += dist;
     }
     if (obj.animPlayingRotDepth) { // Roll, Z-axis
       const speed = obj.animRotDepthSpeed || 1;
       const dist = obj.animRotDepthDist || 10;
-      rz = Math.sin(time * speed / dist) * dist;
+      rz = time * speed;
+      ox += dist;
     }
     
     groupRef.current.position.set(dx, dy, dz);
     groupRef.current.rotation.set(rx, ry, rz);
+    
+    if (orbitOffsetRef.current) {
+      orbitOffsetRef.current.position.set(ox, oy, oz);
+    }
+
+    if (spinRef.current) {
+      let srx = 0, sry = 0, srz = 0;
+      if (obj.animPlayingSpinHorizontal) {
+        sry = time * (obj.animSpinHorizontalSpeed || 1);
+      }
+      if (obj.animPlayingSpinVertical) {
+        srx = time * (obj.animSpinVerticalSpeed || 1);
+      }
+      if (obj.animPlayingSpinDepth) {
+        srz = time * (obj.animSpinDepthSpeed || 1);
+      }
+      spinRef.current.rotation.set(srx, sry, srz);
+    }
   });
 
-  return <group ref={groupRef}>{children}</group>;
+  const pos = obj?.position || [0, 0, 0];
+  return (
+    <group ref={groupRef}>
+      <group ref={orbitOffsetRef}>
+        <group ref={spinRef} position={pos}>
+          <group position={[-pos[0], -pos[1], -pos[2]]}>
+            {children}
+          </group>
+        </group>
+      </group>
+    </group>
+  );
 }
 
 function VirtualCanvasMesh({ data, isSelected, onClick }) {
@@ -451,7 +493,6 @@ export default function Draw3D() {
   const [historyIndex, setHistoryIndex] = useState(0);
   const historyIndexRef = useRef(0);
   const [lastSavedIndex, setLastSavedIndex] = useState(0);
-  const [showConfirmHome, setShowConfirmHome] = useState(false);
 
   const [showVirtualCanvas, setShowVirtualCanvas] = useState(false);
   const [showVirtualCanvasMenu, setShowVirtualCanvasMenu] = useState(false);
@@ -1452,8 +1493,6 @@ export default function Draw3D() {
   };
 
   const handleSaveDataRef = useRef(handleSaveData);
-  const undoRef = useRef(undo);
-  const redoRef = useRef(redo);
   const handleZoomInRef = useRef(handleZoomIn);
   const handleZoomOutRef = useRef(handleZoomOut);
   const handleResetViewRef = useRef(handleResetView);
@@ -1483,26 +1522,16 @@ export default function Draw3D() {
 
   useEffect(() => {
     handleSaveDataRef.current = handleSaveData;
-    undoRef.current = undo;
-    redoRef.current = redo;
     handleZoomInRef.current = handleZoomIn;
     handleZoomOutRef.current = handleZoomOut;
     handleResetViewRef.current = handleResetView;
-  }, [handleSaveData, undo, redo, handleZoomIn, handleZoomOut, handleResetView]);
+  }, [handleSaveData, handleZoomIn, handleZoomOut, handleResetView]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleSaveDataRef.current();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault();
-        undoRef.current();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
-        e.preventDefault();
-        redoRef.current();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.key === ';')) {
         e.preventDefault();
@@ -1528,14 +1557,7 @@ export default function Draw3D() {
         {showUI ? (
           <>
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
-              <button className="start-button inverted" title="ホームに戻る" onClick={() => {
-                const isEmpty = strokesRef.current.length === 0 && boxesRef.current.length === 0 && textsRef.current.length === 0;
-                if (historyIndex > lastSavedIndex && !isEmpty) {
-                  setShowConfirmHome(true);
-                } else {
-                  navigate('/');
-                }
-              }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button className="start-button inverted" title="ホームに戻る" onClick={() => navigate('/')} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <HomeIcon size={28} />
               </button>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2044,11 +2066,22 @@ export default function Draw3D() {
         const aRotDepthSpeed = obj?.animRotDepthSpeed || 1;
         const aRotDepthPlaying = obj?.animPlayingRotDepth || false;
 
+        const aSpinVert = obj?.animSpinVertical || false;
+        const aSpinVertSpeed = obj?.animSpinVerticalSpeed || 1;
+        const aSpinVertPlaying = obj?.animPlayingSpinVertical || false;
+        const aSpinHorz = obj?.animSpinHorizontal || false;
+        const aSpinHorzSpeed = obj?.animSpinHorizontalSpeed || 1;
+        const aSpinHorzPlaying = obj?.animPlayingSpinHorizontal || false;
+        const aSpinDepth = obj?.animSpinDepth || false;
+        const aSpinDepthSpeed = obj?.animSpinDepthSpeed || 1;
+        const aSpinDepthPlaying = obj?.animPlayingSpinDepth || false;
+
         const anyPlaying = (aVert && aVertPlaying) || (aHorz && aHorzPlaying) || (aDepth && aDepthPlaying) ||
-                           (aRotVert && aRotVertPlaying) || (aRotHorz && aRotHorzPlaying) || (aRotDepth && aRotDepthPlaying);
+                           (aRotVert && aRotVertPlaying) || (aRotHorz && aRotHorzPlaying) || (aRotDepth && aRotDepthPlaying) ||
+                           (aSpinVert && aSpinVertPlaying) || (aSpinHorz && aSpinHorzPlaying) || (aSpinDepth && aSpinDepthPlaying);
         const toggleGlobalPlay = () => {
           if (anyPlaying) {
-             updateObjectProperties({ animPlayingVertical: false, animPlayingHorizontal: false, animPlayingDepth: false, animPlayingRotVertical: false, animPlayingRotHorizontal: false, animPlayingRotDepth: false });
+             updateObjectProperties({ animPlayingVertical: false, animPlayingHorizontal: false, animPlayingDepth: false, animPlayingRotVertical: false, animPlayingRotHorizontal: false, animPlayingRotDepth: false, animPlayingSpinVertical: false, animPlayingSpinHorizontal: false, animPlayingSpinDepth: false });
           } else {
              const updates = {};
              if (aVert) updates.animPlayingVertical = true;
@@ -2057,6 +2090,9 @@ export default function Draw3D() {
              if (aRotVert) updates.animPlayingRotVertical = true;
              if (aRotHorz) updates.animPlayingRotHorizontal = true;
              if (aRotDepth) updates.animPlayingRotDepth = true;
+             if (aSpinVert) updates.animPlayingSpinVertical = true;
+             if (aSpinHorz) updates.animPlayingSpinHorizontal = true;
+             if (aSpinDepth) updates.animPlayingSpinDepth = true;
              updateObjectProperties(updates);
           }
         };
@@ -2065,7 +2101,7 @@ export default function Draw3D() {
           <div style={{ position: 'absolute', top: '160px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', width: '250px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
             <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>動きを設定</span>
-              {(aVert || aHorz || aDepth || aRotVert || aRotHorz || aRotDepth) && (
+              {(aVert || aHorz || aDepth || aRotVert || aRotHorz || aRotDepth || aSpinVert || aSpinHorz || aSpinDepth) && (
                 <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: anyPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={toggleGlobalPlay}>
                   {anyPlaying ? <Square size={20} fill="#ef4444" /> : <Play size={20} fill="#22c55e" />}
                 </button>
@@ -2141,7 +2177,7 @@ export default function Draw3D() {
                   )}
                 </div>
                 
-                <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>回転</div>
+                <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>公転 (ある場所の周りを回る)</div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2156,7 +2192,7 @@ export default function Draw3D() {
                   </div>
                   {aRotVert && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>大きさ: <input type="number" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotVertDist} onChange={(e) => updateObjectProperty('animRotVerticalDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotVertSpeed} onChange={(e) => updateObjectProperty('animRotVerticalSpeed', Number(e.target.value))} />
@@ -2167,7 +2203,7 @@ export default function Draw3D() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                      <input type="checkbox" checked={aRotHorz} onChange={(e) => updateObjectProperty('animRotHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に回転する
+                      <input type="checkbox" checked={aRotHorz} onChange={(e) => updateObjectProperty('animRotHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に回転する１
                     </label>
                     {aRotHorz && (
                       <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aRotHorzPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingRotHorizontal', !aRotHorzPlaying)}>
@@ -2177,7 +2213,7 @@ export default function Draw3D() {
                   </div>
                   {aRotHorz && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>大きさ: <input type="number" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotHorzDist} onChange={(e) => updateObjectProperty('animRotHorizontalDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotHorzSpeed} onChange={(e) => updateObjectProperty('animRotHorizontalSpeed', Number(e.target.value))} />
@@ -2188,7 +2224,7 @@ export default function Draw3D() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                      <input type="checkbox" checked={aRotDepth} onChange={(e) => updateObjectProperty('animRotDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 奥に回転する
+                      <input type="checkbox" checked={aRotDepth} onChange={(e) => updateObjectProperty('animRotDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に回転する２
                     </label>
                     {aRotDepth && (
                       <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aRotDepthPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingRotDepth', !aRotDepthPlaying)}>
@@ -2198,10 +2234,69 @@ export default function Draw3D() {
                   </div>
                   {aRotDepth && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>距離: <input type="number" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>大きさ: <input type="number" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="30" step="0.1" value={aRotDepthDist} onChange={(e) => updateObjectProperty('animRotDepthDist', Number(e.target.value))} />
                       <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
                       <input type="range" min="0.1" max="5" step="0.1" value={aRotDepthSpeed} onChange={(e) => updateObjectProperty('animRotDepthSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>自転 (その場で回る)</div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aSpinVert} onChange={(e) => updateObjectProperty('animSpinVertical', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 縦に自転する
+                    </label>
+                    {aSpinVert && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aSpinVertPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingSpinVertical', !aSpinVertPlaying)}>
+                        {aSpinVertPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aSpinVert && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinVertSpeed} onChange={(e) => updateObjectProperty('animSpinVerticalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="-5" max="5" step="0.1" value={aSpinVertSpeed} onChange={(e) => updateObjectProperty('animSpinVerticalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aSpinHorz} onChange={(e) => updateObjectProperty('animSpinHorizontal', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に自転する１
+                    </label>
+                    {aSpinHorz && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aSpinHorzPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingSpinHorizontal', !aSpinHorzPlaying)}>
+                        {aSpinHorzPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aSpinHorz && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinHorzSpeed} onChange={(e) => updateObjectProperty('animSpinHorizontalSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="-5" max="5" step="0.1" value={aSpinHorzSpeed} onChange={(e) => updateObjectProperty('animSpinHorizontalSpeed', Number(e.target.value))} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                      <input type="checkbox" checked={aSpinDepth} onChange={(e) => updateObjectProperty('animSpinDepth', e.target.checked)} style={{ transform: 'scale(1.2)' }} /> 横に自転する２
+                    </label>
+                    {aSpinDepth && (
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: aSpinDepthPlaying ? '#ef4444' : '#22c55e', display: 'flex' }} onClick={() => updateObjectProperty('animPlayingSpinDepth', !aSpinDepthPlaying)}>
+                        {aSpinDepthPlaying ? <Square size={18} fill="#ef4444" /> : <Play size={18} fill="#22c55e" />}
+                      </button>
+                    )}
+                  </div>
+                  {aSpinDepth && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '1.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>速さ: <input type="number" min="-5" max="5" step="0.1" value={aSpinDepthSpeed} onChange={(e) => updateObjectProperty('animSpinDepthSpeed', Number(e.target.value))} style={{ width: '50px', padding: '2px', textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: '4px' }} /></label>
+                      <input type="range" min="-5" max="5" step="0.1" value={aSpinDepthSpeed} onChange={(e) => updateObjectProperty('animSpinDepthSpeed', Number(e.target.value))} />
                     </div>
                   )}
                 </div>
@@ -2546,7 +2641,7 @@ export default function Draw3D() {
             const type = b.shapeType || 'box';
             return (
               <group key={`b-group-${index}`}>
-                <AnimatedWrapper obj={b}>
+                <AnimatedWrapper obj={b} isPaused={(showPropertyPanel || showResizePanel || showAnimationPanel || showAppearancePanel) && (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0)}>
                   {type === 'virtualCanvas' ? (
                     <VirtualCanvasMesh data={b} isSelected={isSelected} onClick={(e) => handleObjectClick(e, 'box', index)} />
                   ) : type === 'virtualCanvasCube' ? (
@@ -2591,7 +2686,7 @@ export default function Draw3D() {
             const isSelected = selection?.textIndices.includes(index);
             return (
               <group key={`t-group-${index}`}>
-                <AnimatedWrapper obj={t}>
+                <AnimatedWrapper obj={t} isPaused={(showPropertyPanel || showResizePanel || showAnimationPanel || showAppearancePanel) && (selection.strokeIndices.length === 0 && selection.boxIndices.length === 0 && selection.textIndices.length === 0)}>
                   <Text
                     key={`t-${index}`}
                     position={t.position}
@@ -2671,30 +2766,6 @@ export default function Draw3D() {
         </div>
       )}
 
-      {showConfirmHome && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
-            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
-              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button 
-                onClick={() => navigate('/')}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
-              >
-                はい
-              </button>
-              <button 
-                onClick={() => setShowConfirmHome(false)}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
-              >
-                いいえ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

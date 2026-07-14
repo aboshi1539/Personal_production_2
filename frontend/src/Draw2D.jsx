@@ -86,8 +86,8 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyIndexRef = useRef(0);
   const [lastSavedIndex, setLastSavedIndex] = useState(0);
-  const [showConfirmHome, setShowConfirmHome] = useState(false);
   const [showVirtualCompleteConfirm, setShowVirtualCompleteConfirm] = useState(false);
   const [showVirtualCancelConfirm, setShowVirtualCancelConfirm] = useState(false);
   const [globalZoom, setGlobalZoom] = useState(1);
@@ -908,8 +908,6 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
   };
 
   const handleSaveRef = useRef(handleSave);
-  const undoRef = useRef(undo);
-  const redoRef = useRef(redo);
 
   const isDirtyRef = useRef(false);
   useEffect(() => {
@@ -936,23 +934,13 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
 
   useEffect(() => {
     handleSaveRef.current = handleSave;
-    undoRef.current = undo;
-    redoRef.current = redo;
-  }, [handleSave, undo, redo]);
+  }, [handleSave]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleSaveRef.current();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault();
-        undoRef.current();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
-        e.preventDefault();
-        redoRef.current();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=' || e.key === ';')) {
         e.preventDefault();
@@ -979,13 +967,7 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
           <>
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
               {!isVirtualCanvas && (
-                <button className="start-button inverted" title="ホームに戻る" onClick={() => {
-                  if (historyIndex > lastSavedIndex && !isCanvasEmpty()) {
-                    setShowConfirmHome(true);
-                  } else {
-                    navigate('/');
-                  }
-                }} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button className="start-button inverted" title="ホームに戻る" onClick={() => navigate('/')} style={{ width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <HomeIcon size={28} />
                 </button>
               )}
@@ -1483,30 +1465,6 @@ export default function Draw2D({ isVirtualCanvas = false, virtualCanvasShape = '
         />
       </div>
 
-      {showConfirmHome && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ marginTop: 0, color: '#e11d48', fontSize: '1.2rem' }}>保存されていません</h3>
-            <p style={{ margin: '1rem 0 2rem 0', color: '#334155', lineHeight: '1.5', fontSize: '0.95rem' }}>
-              このままホームにもどるとデータが消えてしまいますが<br />ホームに戻ってもよろしいですか？
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button 
-                onClick={() => navigate('/')}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: '#e11d48', cursor: 'pointer', fontWeight: 'bold', color: '#fff' }}
-              >
-                はい
-              </button>
-              <button 
-                onClick={() => setShowConfirmHome(false)}
-                style={{ flex: 1, padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', fontWeight: 'bold', color: '#475569' }}
-              >
-                いいえ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showVirtualCompleteConfirm && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
