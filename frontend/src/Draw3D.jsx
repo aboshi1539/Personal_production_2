@@ -61,7 +61,8 @@ function AnimatedWrapper({ obj, isPaused, children }) {
       ox += dist;
     }
     
-    groupRef.current.position.set(dx, dy, dz);
+    const pos = obj?.position || [0, 0, 0];
+    groupRef.current.position.set(pos[0] + dx, pos[1] + dy, pos[2] + dz);
     groupRef.current.rotation.set(rx, ry, rz);
     
     if (orbitOffsetRef.current) {
@@ -85,9 +86,9 @@ function AnimatedWrapper({ obj, isPaused, children }) {
 
   const pos = obj?.position || [0, 0, 0];
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={pos}>
       <group ref={orbitOffsetRef}>
-        <group ref={spinRef} position={pos}>
+        <group ref={spinRef}>
           <group position={[-pos[0], -pos[1], -pos[2]]}>
             {children}
           </group>
@@ -138,6 +139,33 @@ function VirtualCanvasCubeMesh({ data, isSelected, onClick }) {
       <boxGeometry args={data.size || [20, 20, 20]} />
     </mesh>
   );
+}
+
+function generateCompoundOrbitPoints(obj, pos, segments = 800) {
+  const points = [];
+  const maxTime = Math.PI * 2 * 10; 
+  for (let i = 0; i <= segments; i++) {
+    const time = (i / segments) * maxTime;
+    let ox = 0, oy = 0, oz = 0;
+    let rx = 0, ry = 0, rz = 0;
+    if (obj.animRotHorizontal) {
+      ry = time * (obj.animRotHorizontalSpeed || 1);
+      ox += (obj.animRotHorizontalDist || 10);
+    }
+    if (obj.animRotVertical) {
+      rx = time * (obj.animRotVerticalSpeed || 1);
+      oz += (obj.animRotVerticalDist || 10);
+    }
+    if (obj.animRotDepth) {
+      rz = time * (obj.animRotDepthSpeed || 1);
+      ox += (obj.animRotDepthDist || 10);
+    }
+    const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
+    const vec = new THREE.Vector3(ox, oy, oz);
+    vec.applyEuler(euler);
+    points.push([pos[0] + vec.x, pos[1] + vec.y, pos[2] + vec.z]);
+  }
+  return points;
 }
 
 function pointInPolygon(point, vs) {
@@ -1552,7 +1580,7 @@ export default function Draw3D() {
 
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
-      <CustomCursor tool={tool} brushColor={brushColor} />
+      <CustomCursor tool={isDrawingMode ? tool : null} brushColor={brushColor} />
       <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {showUI ? (
           <>
@@ -2522,6 +2550,10 @@ export default function Draw3D() {
                   </div>
                   <input type="range" min="0" max="1" step="0.1" value={obj.opacity ?? 1.0} onChange={(e) => updateObjectProperty('opacity', parseFloat(e.target.value))} style={{ width: '100%' }} />
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.5rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <input type="checkbox" checked={obj.wireframe || false} onChange={(e) => updateObjectProperty('wireframe', e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#475569' }}>骨組みだけ表示する</span>
+                </label>
               </div>
             )}
 
@@ -2563,7 +2595,7 @@ export default function Draw3D() {
       )}
 
       <Canvas 
-        style={{ cursor: ['pen', 'eraser', 'paint', 'fill', 'stamp', 'shape'].includes(tool) ? 'none' : (tool === 'pan' ? 'grab' : 'auto') }}
+        style={{ cursor: (isDrawingMode && ['pen', 'eraser', 'paint', 'fill', 'stamp', 'shape'].includes(tool)) ? 'none' : (isDrawingMode && tool === 'pan' ? 'grab' : 'auto') }}
         onCreated={({ camera }) => { cameraRef.current = camera; }} 
         camera={{ position: [0, 5, 20], fov: 50 }}
       >
@@ -2654,7 +2686,7 @@ export default function Draw3D() {
                       {type === 'cylinder' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 32]} />}
                       {type === 'prism3' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 3]} />}
                       {type === 'prism4' && <cylinderGeometry args={[(b.taper ?? 1) * b.size[0] / 2, b.size[0] / 2, b.size[0], 4]} />}
-                      <meshStandardMaterial color={b.color} transparent={(b.opacity ?? 1.0) < 1.0} opacity={b.opacity ?? 1.0} depthWrite={(b.opacity ?? 1.0) >= 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} />
+                      <meshStandardMaterial color={b.color} transparent={true} opacity={b.opacity ?? 1.0} depthWrite={(b.opacity ?? 1.0) >= 1.0} roughness={0.3} metalness={0.2} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={isSelected ? 0.4 : 0} wireframe={b.wireframe || false} />
                     </mesh>
                   )}
                 </AnimatedWrapper>
@@ -2672,7 +2704,14 @@ export default function Draw3D() {
                         b.position[2] + (b.animDepth ? (b.animDepthDist || 0) : 0)
                       ]
                     ]}
-                    color="#ff7b00"
+                    color={b.color || "#ff7b00"}
+                    lineWidth={3}
+                  />
+                )}
+                {isSelected && (b.animRotHorizontal || b.animRotVertical || b.animRotDepth) && (
+                  <Line
+                    points={generateCompoundOrbitPoints(b, b.position)}
+                    color={b.color || "#ff7b00"}
                     lineWidth={3}
                   />
                 )}
@@ -2715,7 +2754,14 @@ export default function Draw3D() {
                         t.position[2] + (t.animDepth ? (t.animDepthDist || 0) : 0)
                       ]
                     ]}
-                    color="#ff7b00"
+                    color={t.color || "#ff7b00"}
+                    lineWidth={3}
+                  />
+                )}
+                {isSelected && (t.animRotHorizontal || t.animRotVertical || t.animRotDepth) && (
+                  <Line
+                    points={generateCompoundOrbitPoints(t, t.position)}
+                    color={t.color || "#ff7b00"}
                     lineWidth={3}
                   />
                 )}
