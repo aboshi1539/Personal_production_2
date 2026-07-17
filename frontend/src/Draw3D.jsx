@@ -747,7 +747,7 @@ export default function Draw3D() {
 
   const [isDrawingMode, setIsDrawingMode] = useState(true);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState('camera'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
+  const [tool, setTool] = useState('pen'); // 'pen', 'box', 'stamp', 'eraser', 'lasso', 'move', 'paint'
 
   const [brushColor, setBrushColor] = useState('#000000');
   const [brushSize, setBrushSize] = useState(3);
@@ -1781,6 +1781,7 @@ export default function Draw3D() {
                 <button
                   onClick={() => {
                     setIsDrawingMode(true);
+                    setTool('pen');
                     setShowPropertyPanel(false);
                     setShowResizePanel(false);
                     setShowAppearancePanel(false);
@@ -1795,6 +1796,7 @@ export default function Draw3D() {
                 <button
                   onClick={() => {
                     setIsDrawingMode(false);
+                    setTool('camera');
                     setShowPropertyPanel(false);
                     setShowResizePanel(false);
                     setShowAppearancePanel(false);
